@@ -40,21 +40,6 @@
     Tu peux le trouver sur https://streamweasels.com/tools/convert-twitch-username-to-user-id/
   =============================================================== -->
 
-<svg width="0" height="0" style="position:absolute">
-  <filter id="rough-1" x="-30%" y="-80%" width="160%" height="260%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.9 0.35" numOctaves="2" seed="4" result="n"/>
-    <feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/>
-  </filter>
-  <filter id="rough-2" x="-30%" y="-80%" width="160%" height="260%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.7 0.4" numOctaves="3" seed="11" result="n"/>
-    <feDisplacementMap in="SourceGraphic" in2="n" scale="11" xChannelSelector="R" yChannelSelector="G"/>
-  </filter>
-  <filter id="rough-3" x="-30%" y="-80%" width="160%" height="260%">
-    <feTurbulence type="fractalNoise" baseFrequency="1.1 0.3" numOctaves="2" seed="19" result="n"/>
-    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
-  </filter>
-</svg>
-
 <div id="chat-root"></div>
 
 <style>
@@ -90,18 +75,18 @@
   .msg.side-right .line-wrap{ float:right; }
   .msg.side-right .msg-body{ text-align:right; clear:both; }
 
-  .msg-body{ min-width:0; display:flex; flex-direction:column; gap:6px; }
+  .msg-body{ min-width:0; display:flex; flex-direction:column; gap:0; }
 
   /* ---- Chaque ligne (pseudo, texte) est un trait de pinceau independant ---- */
   .line-wrap{
     position:relative;
     display:inline-block;
-    padding:6px 12px;
+    padding:6px 14px;
     clip-path: inset(0 100% 0 0);
     animation: paint-reveal 0.55s steps(16,end) both;
   }
-  .name-line{ animation-delay:0s; }
-  .text-line{ animation-delay:0.3s; }
+  .name-line{ animation-delay:0s; margin-bottom:-10px; }
+  .text-line{ animation-delay:0.3s; z-index:1; }
 
   @keyframes paint-reveal{
     to{ clip-path: inset(0 0% 0 0); }
@@ -116,17 +101,12 @@
 
   .brush{
     position:absolute;
-    inset:-6px -10px;
+    inset:-8px -14px;
     z-index:0;
-    background:
-      repeating-linear-gradient(88deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 6px),
-      linear-gradient(100deg, #050403 0%, #14100c 35%, #070604 60%, #100c09 100%);
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
-            mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
+    background-size:100% 100%;
+    background-repeat:no-repeat;
+    background-position:center;
   }
-  .brush-1{ filter:url(#rough-1); border-radius:40% 60% 45% 55% / 60% 45% 55% 40%; }
-  .brush-2{ filter:url(#rough-2); border-radius:55% 45% 60% 40% / 45% 60% 40% 55%; }
-  .brush-3{ filter:url(#rough-3); border-radius:45% 55% 40% 60% / 55% 40% 60% 45%; }
 
   .brush::after{
     content:"";
@@ -161,9 +141,9 @@
   .username{
     font-family:'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
     font-weight:700;
-    font-size:calc(var(--username-size) + 2px);
+    font-size:calc(var(--username-size) - 4px);
     letter-spacing:0.3px;
-    color:var(--ink-gold);
+    color:#d8d5cd;
   }
 
   .text{
@@ -272,8 +252,11 @@
     return text;
   }
 
-  const BRUSH_VARIANTS = ['brush-1', 'brush-2', 'brush-3'];
-  function randomBrush(){ return BRUSH_VARIANTS[Math.floor(Math.random() * BRUSH_VARIANTS.length)]; }
+  const BRUSH_IMAGES = [
+    'assets/brush-01.png','assets/brush-02.png','assets/brush-03.png','assets/brush-04.png','assets/brush-05.png',
+    'assets/brush-06.png','assets/brush-07.png','assets/brush-08.png','assets/brush-09.png','assets/brush-10.png'
+  ];
+  function randomBrushImage(){ return BRUSH_IMAGES[Math.floor(Math.random() * BRUSH_IMAGES.length)]; }
 
   function addMessage(tags, message){
     try{
@@ -281,20 +264,19 @@
       const side = (messageIndex++ % 2 === 0) ? 'side-left' : 'side-right';
       el.className = 'msg ' + side;
 
-      const color = tags.color || '#c9a15a';
       const displayName = tags['display-name'] || tags.username;
 
       el.innerHTML = `
         <div class="msg-body">
           <div class="line-wrap name-line">
-            <div class="brush ${randomBrush()}"></div>
+            <div class="brush" style="background-image:url('${randomBrushImage()}')"></div>
             <div class="msg-content">
               ${renderBadges(tags)}
-              <span class="username" style="color:${color}">${escapeHtml(displayName)}</span>
+              <span class="username">${escapeHtml(displayName)}</span>
             </div>
           </div>
           <div class="line-wrap text-line">
-            <div class="brush ${randomBrush()}"></div>
+            <div class="brush" style="background-image:url('${randomBrushImage()}')"></div>
             <span class="text">${renderMessageText(message, tags)}</span>
           </div>
         </div>
