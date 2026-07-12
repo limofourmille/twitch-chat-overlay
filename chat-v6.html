@@ -55,31 +55,41 @@
     position:absolute;
     bottom:24px;
     left:24px;
-    width:var(--max-width);
+    right:24px;
+    width:auto;
     display:flex;
     flex-direction:column-reverse; /* nouveaux messages poussent vers le haut */
-    gap:var(--message-gap);
+    align-items:stretch;
+    gap:12px;
     max-height:92vh;
   }
 
   .msg{
     position:relative;
-    padding:14px 20px 14px 26px;
-    margin:6px 0;
+    max-width:74%;
+    padding:12px 20px 16px 20px;
+    margin:8px 0;
   }
+  .msg.side-left{ align-self:flex-start; }
+  .msg.side-right{ align-self:flex-end; }
+  .msg.side-right .msg-content{ justify-content:flex-end; text-align:right; }
 
-  /* ---- La tache d'encre : plusieurs couches asymetriques superposees ---- */
+  /* ---- La bulle d'encre en coup de pinceau, avec petite pointe ---- */
   .ink-blot{
     position:absolute;
-    inset:-16px -10px -12px -20px;
+    inset:-14px -8px -18px -8px;
     z-index:0;
     background:var(--ink-black);
-    border-radius: 44% 56% 61% 39% / 49% 41% 59% 51%;
-    transform-origin:10% 50%;
+    border-radius: 30% 70% 68% 32% / 62% 35% 65% 38%;
+    transform-origin:15% 55%;
     filter: drop-shadow(0 3px 8px rgba(0,0,0,0.6));
     animation:
       blot-in 0.85s cubic-bezier(.16,.9,.2,1) both,
       blot-wobble-1 5.5s ease-in-out 0.85s infinite alternate;
+  }
+  .msg.side-right .ink-blot{
+    transform-origin:85% 55%;
+    border-radius: 70% 30% 32% 68% / 35% 62% 38% 65%;
   }
   .ink-blot::before,
   .ink-blot::after{
@@ -89,38 +99,60 @@
     mix-blend-mode:multiply;
   }
   .ink-blot::before{
-    inset:8% 12% 12% 4%;
-    border-radius: 58% 42% 38% 62% / 55% 60% 40% 45%;
-    opacity:0.55;
+    inset:10% 14% 16% 6%;
+    border-radius: 62% 38% 30% 70% / 58% 65% 35% 42%;
+    opacity:0.5;
     animation: blot-wobble-2 6.5s ease-in-out 0.9s infinite alternate;
   }
   .ink-blot::after{
-    inset:-6% -8% 16% 32%;
-    border-radius: 40% 60% 55% 45% / 62% 35% 65% 38%;
-    opacity:0.4;
+    inset:-4% -6% 20% 34%;
+    border-radius: 34% 66% 60% 40% / 66% 28% 72% 34%;
+    opacity:0.38;
     animation: blot-wobble-3 7s ease-in-out 0.95s infinite alternate;
   }
 
-  @keyframes blot-in{
-    0%{ transform:scale(0.04); opacity:0; }
-    55%{ opacity:1; }
-    100%{ transform:scale(1); opacity:1; }
+  .ink-tail{
+    position:absolute;
+    z-index:0;
+    width:22px; height:22px;
+    background:var(--ink-black);
+    bottom:2px; left:20px;
+    border-radius:0% 68% 68% 68%;
+    transform:rotate(18deg);
   }
-  @keyframes blot-wobble-1{
-    0%{   border-radius: 44% 56% 61% 39% / 49% 41% 59% 51%; }
-    50%{  border-radius: 52% 48% 45% 55% / 40% 55% 45% 60%; }
-    100%{ border-radius: 40% 60% 50% 50% / 55% 45% 55% 45%; }
-  }
-  @keyframes blot-wobble-2{
-    0%{   border-radius: 58% 42% 38% 62% / 55% 60% 40% 45%; }
-    100%{ border-radius: 45% 55% 60% 40% / 42% 50% 50% 58%; }
-  }
-  @keyframes blot-wobble-3{
-    0%{   border-radius: 40% 60% 55% 45% / 62% 35% 65% 38%; }
-    100%{ border-radius: 55% 45% 40% 60% / 45% 60% 40% 55%; }
+  .msg.side-right .ink-tail{
+    left:auto; right:20px;
+    border-radius:68% 0% 68% 68%;
+    transform:rotate(-18deg);
   }
 
-  .msg.leaving .ink-blot{
+  @keyframes blot-in{
+    0%{ transform:scale(0.04) rotate(-8deg); opacity:0; }
+    55%{ opacity:1; }
+    100%{ transform:scale(1) rotate(-2deg); opacity:1; }
+  }
+  .msg.side-right .ink-blot{ animation-name: blot-in-r, blot-wobble-1; }
+  @keyframes blot-in-r{
+    0%{ transform:scale(0.04) rotate(8deg); opacity:0; }
+    55%{ opacity:1; }
+    100%{ transform:scale(1) rotate(2deg); opacity:1; }
+  }
+  @keyframes blot-wobble-1{
+    0%{   border-radius: 30% 70% 68% 32% / 62% 35% 65% 38%; }
+    50%{  border-radius: 38% 62% 55% 45% / 50% 48% 52% 50%; }
+    100%{ border-radius: 34% 66% 60% 40% / 55% 42% 58% 45%; }
+  }
+  @keyframes blot-wobble-2{
+    0%{   border-radius: 62% 38% 30% 70% / 58% 65% 35% 42%; }
+    100%{ border-radius: 48% 52% 58% 42% / 45% 52% 48% 55%; }
+  }
+  @keyframes blot-wobble-3{
+    0%{   border-radius: 34% 66% 60% 40% / 66% 28% 72% 34%; }
+    100%{ border-radius: 56% 44% 38% 62% / 42% 60% 40% 58%; }
+  }
+
+  .msg.leaving .ink-blot,
+  .msg.leaving .ink-tail{
     animation: blot-out 0.8s ease forwards;
   }
   @keyframes blot-out{
@@ -211,6 +243,7 @@
 
   const root = document.getElementById('chat-root');
   let badgeMap = {}; // "badge-set/version" -> image url
+  let messageIndex = 0;
 
   async function loadBadges(){
     try{
@@ -284,13 +317,15 @@
   function addMessage(tags, message){
     try{
       const el = document.createElement('div');
-      el.className = 'msg';
+      const side = (messageIndex++ % 2 === 0) ? 'side-left' : 'side-right';
+      el.className = 'msg ' + side;
 
       const color = tags.color || '#c9a15a';
       const displayName = tags['display-name'] || tags.username;
 
       el.innerHTML = `
         <div class="ink-blot"></div>
+        <div class="ink-tail"></div>
         <div class="msg-content">
           ${renderBadges(tags)}
           <div class="msg-body">
