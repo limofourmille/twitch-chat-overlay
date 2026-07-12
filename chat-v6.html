@@ -67,133 +67,76 @@
   .msg{
     position:relative;
     max-width:74%;
-    padding:12px 20px 16px 20px;
-    margin:8px 0;
+    padding:6px 4px;
+    margin:10px 0;
   }
   .msg.side-left{ align-self:flex-start; }
   .msg.side-right{ align-self:flex-end; }
-  .msg.side-right .msg-content{ justify-content:flex-end; text-align:right; }
+  .msg.side-right .line-wrap{ float:right; }
+  .msg.side-right .msg-body{ text-align:right; clear:both; }
 
-  /* ---- La bulle d'encre en coup de pinceau, avec petite pointe ---- */
-  .ink-blot{
+  .msg-body{ min-width:0; display:flex; flex-direction:column; gap:6px; }
+
+  /* ---- Chaque ligne (pseudo, texte) est un trait de pinceau independant ---- */
+  .line-wrap{
+    position:relative;
+    display:inline-block;
+    padding:6px 12px;
+    clip-path: inset(0 100% 0 0);
+    animation: paint-reveal 0.55s steps(16,end) both;
+  }
+  .name-line{ animation-delay:0s; }
+  .text-line{ animation-delay:0.3s; }
+
+  @keyframes paint-reveal{
+    to{ clip-path: inset(0 0% 0 0); }
+  }
+
+  .msg.leaving .line-wrap{
+    animation: paint-hide 0.4s steps(12,end) forwards;
+  }
+  @keyframes paint-hide{
+    to{ clip-path: inset(0 0 0 100%); }
+  }
+
+  .brush{
     position:absolute;
-    inset:-14px -8px -18px -8px;
+    inset:0;
     z-index:0;
     background:var(--ink-black);
-    border-radius: 30% 70% 68% 32% / 62% 35% 65% 38%;
-    transform-origin:15% 55%;
-    filter: drop-shadow(0 3px 8px rgba(0,0,0,0.6));
-    animation:
-      blot-in 0.85s cubic-bezier(.16,.9,.2,1) both,
-      blot-wobble-1 5.5s ease-in-out 0.85s infinite alternate;
   }
-  .msg.side-right .ink-blot{
-    transform-origin:85% 55%;
-    border-radius: 70% 30% 32% 68% / 35% 62% 38% 65%;
-  }
-  .ink-blot::before,
-  .ink-blot::after{
+  .brush-1{ clip-path:polygon(2% 45%,6% 20%,14% 8%,24% 18%,30% 4%,40% 22%,48% 10%,58% 26%,66% 12%,76% 24%,84% 10%,92% 28%,98% 18%,100% 42%,96% 68%,90% 55%,82% 78%,74% 60%,64% 82%,54% 64%,44% 84%,34% 66%,24% 86%,14% 70%,6% 90%,0% 65%); }
+  .brush-2{ clip-path:polygon(0% 50%,4% 15%,12% 30%,18% 5%,28% 25%,36% 8%,46% 28%,56% 10%,66% 30%,76% 12%,86% 32%,94% 14%,100% 40%,98% 72%,92% 55%,84% 80%,76% 62%,66% 85%,56% 68%,46% 88%,36% 70%,26% 90%,16% 72%,8% 92%,2% 75%,0% 55%); }
+  .brush-3{ clip-path:polygon(0% 60%,3% 25%,10% 40%,16% 10%,26% 32%,34% 6%,44% 30%,54% 12%,64% 34%,74% 14%,84% 36%,92% 16%,100% 45%,97% 78%,90% 58%,80% 82%,70% 60%,58% 84%,48% 62%,36% 86%,24% 64%,12% 88%,4% 68%,0% 80%); }
+
+  .brush::after{
     content:"";
     position:absolute;
+    right:-8px; top:30%;
+    width:5px; height:5px;
     background:var(--ink-black);
-    mix-blend-mode:multiply;
+    border-radius:50%;
   }
-  .ink-blot::before{
-    inset:10% 14% 16% 6%;
-    border-radius: 62% 38% 30% 70% / 58% 65% 35% 42%;
-    opacity:0.5;
-    animation: blot-wobble-2 6.5s ease-in-out 0.9s infinite alternate;
-  }
-  .ink-blot::after{
-    inset:-4% -6% 20% 34%;
-    border-radius: 34% 66% 60% 40% / 66% 28% 72% 34%;
-    opacity:0.38;
-    animation: blot-wobble-3 7s ease-in-out 0.95s infinite alternate;
-  }
+  .msg.side-right .brush::after{ right:auto; left:-8px; }
 
-  .ink-tail{
-    position:absolute;
-    z-index:0;
-    width:22px; height:22px;
-    background:var(--ink-black);
-    bottom:2px; left:20px;
-    border-radius:0% 68% 68% 68%;
-    transform:rotate(18deg);
-  }
-  .msg.side-right .ink-tail{
-    left:auto; right:20px;
-    border-radius:68% 0% 68% 68%;
-    transform:rotate(-18deg);
-  }
-
-  @keyframes blot-in{
-    0%{ transform:scale(0.04) rotate(-8deg); opacity:0; }
-    55%{ opacity:1; }
-    100%{ transform:scale(1) rotate(-2deg); opacity:1; }
-  }
-  .msg.side-right .ink-blot{ animation-name: blot-in-r, blot-wobble-1; }
-  @keyframes blot-in-r{
-    0%{ transform:scale(0.04) rotate(8deg); opacity:0; }
-    55%{ opacity:1; }
-    100%{ transform:scale(1) rotate(2deg); opacity:1; }
-  }
-  @keyframes blot-wobble-1{
-    0%{   border-radius: 30% 70% 68% 32% / 62% 35% 65% 38%; }
-    50%{  border-radius: 38% 62% 55% 45% / 50% 48% 52% 50%; }
-    100%{ border-radius: 34% 66% 60% 40% / 55% 42% 58% 45%; }
-  }
-  @keyframes blot-wobble-2{
-    0%{   border-radius: 62% 38% 30% 70% / 58% 65% 35% 42%; }
-    100%{ border-radius: 48% 52% 58% 42% / 45% 52% 48% 55%; }
-  }
-  @keyframes blot-wobble-3{
-    0%{   border-radius: 34% 66% 60% 40% / 66% 28% 72% 34%; }
-    100%{ border-radius: 56% 44% 38% 62% / 42% 60% 40% 58%; }
-  }
-
-  .msg.leaving .ink-blot,
-  .msg.leaving .ink-tail{
-    animation: blot-out 0.8s ease forwards;
-  }
-  @keyframes blot-out{
-    0%{ opacity:1; filter:drop-shadow(0 3px 8px rgba(0,0,0,0.6)) blur(0); }
-    100%{ opacity:0; filter:blur(10px); transform:scale(0.88); }
-  }
-
-  /* ---- Le contenu (badges + texte), par-dessus la tache ---- */
+  /* ---- Le contenu (badges + texte), par-dessus le trait ---- */
   .msg-content{
     position:relative;
     z-index:1;
     display:flex;
-    align-items:flex-start;
-    gap:8px;
-    opacity:0;
-    animation: text-in 0.6s ease-out 0.4s both;
-  }
-  .msg.leaving .msg-content{
-    animation: text-out 0.5s ease forwards;
-  }
-  @keyframes text-in{
-    0%{ opacity:0; transform:translateY(5px); }
-    100%{ opacity:1; transform:translateY(0); }
-  }
-  @keyframes text-out{
-    0%{ opacity:1; }
-    100%{ opacity:0; }
+    align-items:center;
+    gap:6px;
   }
 
   .badges{
     display:flex;
     gap:3px;
-    margin-top:4px;
     flex-shrink:0;
   }
   .badges img{
-    width:18px; height:18px;
+    width:16px; height:16px;
     display:block;
   }
-
-  .msg-body{ min-width:0; }
 
   .username{
     font-family:'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
@@ -201,14 +144,6 @@
     font-size:calc(var(--username-size) + 2px);
     letter-spacing:0.3px;
     color:var(--ink-gold);
-    margin-right:5px;
-  }
-
-  .colon{
-    color:var(--paper);
-    opacity:0.5;
-    margin-right:5px;
-    font-family:'Segoe Print', 'Bradley Hand', cursive;
   }
 
   .text{
@@ -217,6 +152,8 @@
     font-size:calc(var(--text-size) + 2px);
     line-height:1.4;
     word-break:break-word;
+    position:relative;
+    z-index:1;
   }
 
   .emote{
@@ -254,6 +191,7 @@
         });
       });
     }catch(e){ console.warn('Badges globaux indisponibles', e); }
+
 
     if(CONFIG.CHANNEL_ID){
       try{
@@ -314,6 +252,9 @@
     return text;
   }
 
+  const BRUSH_VARIANTS = ['brush-1', 'brush-2', 'brush-3'];
+  function randomBrush(){ return BRUSH_VARIANTS[Math.floor(Math.random() * BRUSH_VARIANTS.length)]; }
+
   function addMessage(tags, message){
     try{
       const el = document.createElement('div');
@@ -324,12 +265,17 @@
       const displayName = tags['display-name'] || tags.username;
 
       el.innerHTML = `
-        <div class="ink-blot"></div>
-        <div class="ink-tail"></div>
-        <div class="msg-content">
-          ${renderBadges(tags)}
-          <div class="msg-body">
-            <span class="username" style="color:${color}">${escapeHtml(displayName)}</span><span class="colon">:</span><span class="text">${renderMessageText(message, tags)}</span>
+        <div class="msg-body">
+          <div class="line-wrap name-line">
+            <div class="brush ${randomBrush()}"></div>
+            <div class="msg-content">
+              ${renderBadges(tags)}
+              <span class="username" style="color:${color}">${escapeHtml(displayName)}</span>
+            </div>
+          </div>
+          <div class="line-wrap text-line">
+            <div class="brush ${randomBrush()}"></div>
+            <span class="text">${renderMessageText(message, tags)}</span>
           </div>
         </div>
       `;
