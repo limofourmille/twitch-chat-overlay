@@ -40,6 +40,21 @@
     Tu peux le trouver sur https://streamweasels.com/tools/convert-twitch-username-to-user-id/
   =============================================================== -->
 
+<svg width="0" height="0" style="position:absolute">
+  <filter id="rough-1" x="-30%" y="-80%" width="160%" height="260%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9 0.35" numOctaves="2" seed="4" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="rough-2" x="-30%" y="-80%" width="160%" height="260%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.7 0.4" numOctaves="3" seed="11" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="11" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="rough-3" x="-30%" y="-80%" width="160%" height="260%">
+    <feTurbulence type="fractalNoise" baseFrequency="1.1 0.3" numOctaves="2" seed="19" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
 <div id="chat-root"></div>
 
 <style>
@@ -101,23 +116,28 @@
 
   .brush{
     position:absolute;
-    inset:0;
+    inset:-6px -10px;
     z-index:0;
-    background:var(--ink-black);
+    background:
+      repeating-linear-gradient(88deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 6px),
+      linear-gradient(100deg, #050403 0%, #14100c 35%, #070604 60%, #100c09 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
   }
-  .brush-1{ clip-path:polygon(2% 45%,6% 20%,14% 8%,24% 18%,30% 4%,40% 22%,48% 10%,58% 26%,66% 12%,76% 24%,84% 10%,92% 28%,98% 18%,100% 42%,96% 68%,90% 55%,82% 78%,74% 60%,64% 82%,54% 64%,44% 84%,34% 66%,24% 86%,14% 70%,6% 90%,0% 65%); }
-  .brush-2{ clip-path:polygon(0% 50%,4% 15%,12% 30%,18% 5%,28% 25%,36% 8%,46% 28%,56% 10%,66% 30%,76% 12%,86% 32%,94% 14%,100% 40%,98% 72%,92% 55%,84% 80%,76% 62%,66% 85%,56% 68%,46% 88%,36% 70%,26% 90%,16% 72%,8% 92%,2% 75%,0% 55%); }
-  .brush-3{ clip-path:polygon(0% 60%,3% 25%,10% 40%,16% 10%,26% 32%,34% 6%,44% 30%,54% 12%,64% 34%,74% 14%,84% 36%,92% 16%,100% 45%,97% 78%,90% 58%,80% 82%,70% 60%,58% 84%,48% 62%,36% 86%,24% 64%,12% 88%,4% 68%,0% 80%); }
+  .brush-1{ filter:url(#rough-1); border-radius:40% 60% 45% 55% / 60% 45% 55% 40%; }
+  .brush-2{ filter:url(#rough-2); border-radius:55% 45% 60% 40% / 45% 60% 40% 55%; }
+  .brush-3{ filter:url(#rough-3); border-radius:45% 55% 40% 60% / 55% 40% 60% 45%; }
 
   .brush::after{
     content:"";
     position:absolute;
-    right:-8px; top:30%;
-    width:5px; height:5px;
-    background:var(--ink-black);
+    right:-10px; top:35%;
+    width:4px; height:4px;
+    background:#0a0806;
     border-radius:50%;
+    filter:blur(0.3px);
   }
-  .msg.side-right .brush::after{ right:auto; left:-8px; }
+  .msg.side-right .brush::after{ right:auto; left:-10px; }
 
   /* ---- Le contenu (badges + texte), par-dessus le trait ---- */
   .msg-content{
