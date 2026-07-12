@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Twitch Chat — Ink Overlay</title>
+<style>
+  /* ============================================================
+     CONFIG RAPIDE — modifie ces valeurs et c'est prêt
+     ============================================================ */
+  :root{
+    --ink-black:      #16110d;
+    --ink-indigo:     #262038;
+    --ink-wash:       rgba(38,32,56,0.55);
+    --ink-crimson:    #8c2f39;
+    --ink-gold:       #c9a15a;
+    --paper:          #f2ead9;
+    --text-size:      21px;
+    --username-size:  21px;
+    --message-gap:    10px;
+    --max-width:      560px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===============================================================
+  TWITCH CHAT INK OVERLAY
+  ===============================================================
+  Utilisation dans OBS :
+  1. Ajoute une "Source de navigateur" (Browser Source)
+  2. Fichier local -> pointe vers ce .html (ou héberge-le et mets l'URL)
+  3. Largeur ~600, Hauteur ~800 (ajuste selon ta mise en page)
+  4. Coche "Actualiser le navigateur quand la scène devient active"
+  5. Le fond est transparent nativement, rien à cocher côté OBS
+
+  CONFIG :
+  - CHANNEL : ton pseudo Twitch (login, tout en minuscules)
+  - CHANNEL_ID : ton ID numérique Twitch (optionnel, pour les badges
+    sub/bits propres à TA chaîne plutôt que les badges génériques).
+    Tu peux le trouver sur https://streamweasels.com/tools/convert-twitch-username-to-user-id/
+  =============================================================== -->
+
+<div id="chat-root"></div>
+
+<style>
+  html,body{
+    margin:0; padding:0;
+    background:transparent;
+    width:100%; height:100%;
+    overflow:hidden;
+    font-family:'Inter', 'Segoe UI', sans-serif;
+  }
+
+  #chat-root{
+    position:absolute;
+    bottom:24px;
+    left:24px;
+    right:24px;
+    width:auto;
+    display:flex;
+    flex-direction:column-reverse; /* nouveaux messages poussent vers le haut */
+    align-items:stretch;
+    gap:12px;
+    max-height:92vh;
+  }
+
+  .msg{
+    position:relative;
+    max-width:74%;
+    padding:6px 4px;
+    margin:10px 0;
+  }
+  .msg.side-left{ align-self:flex-start; }
+  .msg.side-right{ align-self:flex-end; }
+  .msg.side-right .line-wrap{ float:right; }
+  .msg.side-right .msg-body{ text-align:right; clear:both; }
+
+  .msg-body{ min-width:0; display:flex; flex-direction:column; gap:6px; }
+
+  /* ---- Chaque ligne (pseudo, texte) est un trait de pinceau independant ---- */
+  .line-wrap{
+    position:relative;
+    display:inline-block;
+    padding:6px 12px;
+    clip-path: inset(0 100% 0 0);
+    animation: paint-reveal 0.55s steps(16,end) both;
+  }
+  .name-line{ animation-delay:0s; }
+  .text-line{ animation-delay:0.3s; }
+
+  @keyframes paint-reveal{
+    to{ clip-path: inset(0 0% 0 0); }
+  }
+
+  .msg.leaving .line-wrap{
+    animation: paint-hide 0.4s steps(12,end) forwards;
+  }
+  @keyframes paint-hide{
+    to{ clip-path: inset(0 0 0 100%); }
+  }
+
+  .brush{
+    position:absolute;
+    inset:0;
+    z-index:0;
+    background:var(--ink-black);
+  }
+  .brush-1{ clip-path:polygon(2% 45%,6% 20%,14% 8%,24% 18%,30% 4%,40% 22%,48% 10%,58% 26%,66% 12%,76% 24%,84% 10%,92% 28%,98% 18%,100% 42%,96% 68%,90% 55%,82% 78%,74% 60%,64% 82%,54% 64%,44% 84%,34% 66%,24% 86%,14% 70%,6% 90%,0% 65%); }
+  .brush-2{ clip-path:polygon(0% 50%,4% 15%,12% 30%,18% 5%,28% 25%,36% 8%,46% 28%,56% 10%,66% 30%,76% 12%,86% 32%,94% 14%,100% 40%,98% 72%,92% 55%,84% 80%,76% 62%,66% 85%,56% 68%,46% 88%,36% 70%,26% 90%,16% 72%,8% 92%,2% 75%,0% 55%); }
+  .brush-3{ clip-path:polygon(0% 60%,3% 25%,10% 40%,16% 10%,26% 32%,34% 6%,44% 30%,54% 12%,64% 34%,74% 14%,84% 36%,92% 16%,100% 45%,97% 78%,90% 58%,80% 82%,70% 60%,58% 84%,48% 62%,36% 86%,24% 64%,12% 88%,4% 68%,0% 80%); }
+
+  .brush::after{
+    content:"";
+    position:absolute;
+    right:-8px; top:30%;
+    width:5px; height:5px;
+    background:var(--ink-black);
+    border-radius:50%;
+  }
+  .msg.side-right .brush::after{ right:auto; left:-8px; }
+
+  /* ---- Le contenu (badges + texte), par-dessus le trait ---- */
+  .msg-content{
+    position:relative;
+    z-index:1;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  .badges{
+    display:flex;
+    gap:3px;
+    flex-shrink:0;
+  }
+  .badges img{
+    width:16px; height:16px;
+    display:block;
+  }
+
+  .username{
+    font-family:'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
+    font-weight:700;
+    font-size:calc(var(--username-size) + 2px);
+    letter-spacing:0.3px;
+    color:var(--ink-gold);
+  }
+
+  .text{
+    color:var(--paper);
+    font-family:'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
+    font-size:calc(var(--text-size) + 2px);
+    line-height:1.4;
+    word-break:break-word;
+    position:relative;
+    z-index:1;
+  }
+
+  .emote{
+    height:1.6em;
+    vertical-align:middle;
+    margin:-2px 1px;
+  }
+</style>
+
+<script>
+(function(){
+
+  /* ====================== CONFIG ====================== */
+  const CONFIG = {
+    CHANNEL: "maintenance_cacher_de_fou",
+    CHANNEL_ID: "1519448225",
+    MAX_MESSAGES: 12,                 // nb de messages affiches simultanement
+    MESSAGE_LIFETIME_MS: 18000,       // 0 = les messages restent indefiniment
+    SHOW_BADGES: true,
+    SHOW_EMOTES: true,
+    DEBUG: false,                      // passe a true pour reafficher le message de test + logs console
+  };
+  /* ====================================================== */
+
+  const root = document.getElementById('chat-root');
+  let badgeMap = {}; // "badge-set/version" -> image url
+  let messageIndex = 0;
+
+  async function loadBadges(){
+    try{
+      const g = await fetch('https://badges.twitch.tv/v1/badges/global/display').then(r=>r.json());
+      Object.entries(g.badge_sets).forEach(([setId, data])=>{
+        Object.entries(data.versions).forEach(([ver, v])=>{
+          badgeMap[setId+'/'+ver] = v.image_url_2x || v.image_url_1x;
+        });
+      });
+    }catch(e){ console.warn('Badges globaux indisponibles', e); }
+
+
+    if(CONFIG.CHANNEL_ID){
+      try{
+        const c = await fetch('https://badges.twitch.tv/v1/badges/channels/'+CONFIG.CHANNEL_ID+'/display').then(r=>r.json());
+        Object.entries(c.badge_sets).forEach(([setId, data])=>{
+          Object.entries(data.versions).forEach(([ver, v])=>{
+            badgeMap[setId+'/'+ver] = v.image_url_2x || v.image_url_1x; // ecrase les globaux (sub badges propres a la chaine)
+          });
+        });
+      }catch(e){ console.warn('Badges de chaine indisponibles (CHANNEL_ID correct ?)', e); }
+    }
+  }
+
+  function renderBadges(tags){
+    if(!CONFIG.SHOW_BADGES || !tags.badges) return '';
+    let html = '<div class="badges">';
+    Object.entries(tags.badges).forEach(([setId, ver])=>{
+      const url = badgeMap[setId+'/'+ver];
+      if(url) html += `<img src="${url}" alt="${setId}" title="${setId}">`;
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function escapeHtml(str){
+    const d = document.createElement('div');
+    d.innerText = str;
+    return d.innerHTML;
+  }
+
+  function renderMessageText(message, tags){
+    let text = escapeHtml(message);
+
+    if(CONFIG.SHOW_EMOTES && tags.emotes){
+      // On travaille sur la version brute pour respecter les offsets Twitch,
+      // donc on reconstruit depuis message (pas depuis le texte deja echappe)
+      const chars = Array.from(message);
+      const ranges = [];
+      Object.entries(tags.emotes).forEach(([emoteId, positions])=>{
+        positions.forEach(pos=>{
+          const [start,end] = pos.split('-').map(Number);
+          ranges.push({start, end, emoteId});
+        });
+      });
+      ranges.sort((a,b)=>a.start-b.start);
+
+      let out = '';
+      let cursor = 0;
+      ranges.forEach(r=>{
+        out += escapeHtml(chars.slice(cursor, r.start).join(''));
+        const url = `https://static-cdn.jtvnw.net/emoticons/v2/${r.emoteId}/default/dark/2.0`;
+        out += `<img class="emote" src="${url}" alt="">`;
+        cursor = r.end+1;
+      });
+      out += escapeHtml(chars.slice(cursor).join(''));
+      text = out;
+    }
+    return text;
+  }
+
+  const BRUSH_VARIANTS = ['brush-1', 'brush-2', 'brush-3'];
+  function randomBrush(){ return BRUSH_VARIANTS[Math.floor(Math.random() * BRUSH_VARIANTS.length)]; }
+
+  function addMessage(tags, message){
+    try{
+      const el = document.createElement('div');
+      const side = (messageIndex++ % 2 === 0) ? 'side-left' : 'side-right';
+      el.className = 'msg ' + side;
+
+      const color = tags.color || '#c9a15a';
+      const displayName = tags['display-name'] || tags.username;
+
+      el.innerHTML = `
+        <div class="msg-body">
+          <div class="line-wrap name-line">
+            <div class="brush ${randomBrush()}"></div>
+            <div class="msg-content">
+              ${renderBadges(tags)}
+              <span class="username" style="color:${color}">${escapeHtml(displayName)}</span>
+            </div>
+          </div>
+          <div class="line-wrap text-line">
+            <div class="brush ${randomBrush()}"></div>
+            <span class="text">${renderMessageText(message, tags)}</span>
+          </div>
+        </div>
+      `;
+
+      root.appendChild(el);
+
+      // Purge si trop de messages
+      while(root.children.length > CONFIG.MAX_MESSAGES){
+        root.removeChild(root.firstElementChild);
+      }
+
+      if(CONFIG.MESSAGE_LIFETIME_MS > 0){
+        setTimeout(()=>{
+          el.classList.add('leaving');
+          setTimeout(()=> el.remove(), 950);
+        }, CONFIG.MESSAGE_LIFETIME_MS);
+      }
+    }catch(err){
+      console.error('[chat-overlay] [ERREUR] erreur lors de l\'affichage du message :', err, tags, message);
+    }
+  }
+
+  window.addEventListener('error', (e) => {
+    console.error('[chat-overlay] [ERREUR] erreur JS globale :', e.message, e.filename+':'+e.lineno);
+  });
+
+  /* ================================================================
+     CLIENT IRC TWITCH - implementation maison, sans dependance externe
+     Protocole : wss://irc-ws.chat.twitch.tv (IRCv3 + tags Twitch)
+     Doc : https://dev.twitch.tv/docs/irc/
+     ================================================================ */
+
+  function parseIrcTags(rawTags){
+    const tags = {};
+    rawTags.split(';').forEach(pair=>{
+      const eq = pair.indexOf('=');
+      if(eq === -1) return;
+      const key = pair.slice(0, eq);
+      let val = pair.slice(eq+1);
+      // unescape IRCv3 tag values
+      val = val.replace(/\\s/g,' ').replace(/\\:/g,';').replace(/\\\\/g,'\\').replace(/\\r/g,'\r').replace(/\\n/g,'\n');
+      tags[key] = val;
+    });
+    return tags;
+  }
+
+  function parseBadges(raw){
+    const out = {};
+    if(!raw) return out;
+    raw.split(',').forEach(b=>{
+      const [set, ver] = b.split('/');
+      if(set) out[set] = ver;
+    });
+    return out;
+  }
+
+  function parseEmotes(raw){
+    // format: "emoteId:start-end,start-end/emoteId2:start-end"
+    const out = {};
+    if(!raw) return out;
+    raw.split('/').forEach(group=>{
+      const [id, ranges] = group.split(':');
+      if(!id || !ranges) return;
+      out[id] = ranges.split(',');
+    });
+    return out;
+  }
+
+  function parseIrcLine(line){
+    if(!line) return null;
+    let rest = line;
+    let tags = {};
+
+    if(rest.startsWith('@')){
+      const sp = rest.indexOf(' ');
+      tags = parseIrcTags(rest.slice(1, sp));
+      rest = rest.slice(sp+1);
+    }
+
+    let prefix = '';
+    if(rest.startsWith(':')){
+      const sp = rest.indexOf(' ');
+      prefix = rest.slice(1, sp);
+      rest = rest.slice(sp+1);
+    }
+
+    const sp = rest.indexOf(' ');
+    const command = sp === -1 ? rest : rest.slice(0, sp);
+    rest = sp === -1 ? '' : rest.slice(sp+1);
+
+    let trailing = '';
+    const trailIdx = rest.indexOf(' :');
+    let paramsStr;
+    if(rest.startsWith(':')){
+      trailing = rest.slice(1);
+      paramsStr = '';
+    } else if(trailIdx !== -1){
+      paramsStr = rest.slice(0, trailIdx);
+      trailing = rest.slice(trailIdx+2);
+    } else {
+      paramsStr = rest;
+    }
+    const params = paramsStr.length ? paramsStr.split(' ') : [];
+    if(trailing || rest.includes(' :')) params.push(trailing);
+
+    return { tags, prefix, command, params, trailing };
+  }
+
+  function connectTwitchIRC(channel, handlers){
+    const NICK = 'justinfan' + Math.floor(10000 + Math.random()*89999);
+    let ws;
+    let pingInterval;
+
+    function connect(){
+      ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+
+      ws.onopen = () => {
+        ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership');
+        ws.send('PASS SCHMOOPIIE');
+        ws.send('NICK ' + NICK);
+        ws.send('JOIN #' + channel.toLowerCase());
+      };
+
+      ws.onmessage = (event) => {
+        const lines = event.data.split('\r\n').filter(Boolean);
+        lines.forEach(line => {
+          if(CONFIG.DEBUG) console.log('[irc]', line);
+
+          if(line.startsWith('PING')){
+            ws.send('PONG :tmi.twitch.tv');
+            return;
+          }
+
+          const msg = parseIrcLine(line);
+          if(!msg) return;
+
+          if(msg.command === '001' || msg.command === 'GLOBALUSERSTATE'){
+            handlers.onConnected && handlers.onConnected();
+          }
+
+          if(msg.command === 'PRIVMSG'){
+            const tags = msg.tags;
+            const parsedTags = {
+              'display-name': tags['display-name'] || (msg.prefix ? msg.prefix.split('!')[0] : 'inconnu'),
+              username: msg.prefix ? msg.prefix.split('!')[0] : 'inconnu',
+              color: tags.color || '',
+              badges: parseBadges(tags.badges),
+              emotes: parseEmotes(tags.emotes),
+            };
+            const message = msg.params[msg.params.length-1] || '';
+            handlers.onMessage && handlers.onMessage(parsedTags, message);
+          }
+
+          if(msg.command === 'NOTICE'){
+            if(CONFIG.DEBUG) console.warn('[chat-overlay] NOTICE Twitch :', msg.trailing);
+          }
+        });
+      };
+
+      ws.onclose = () => {
+        handlers.onDisconnected && handlers.onDisconnected();
+        clearInterval(pingInterval);
+        setTimeout(connect, 3000); // reconnexion auto
+      };
+
+      ws.onerror = (err) => {
+        console.error('[chat-overlay] [ERREUR] erreur WebSocket :', err);
+      };
+
+      // keep-alive de secours (en plus des PING serveur)
+      pingInterval = setInterval(() => {
+        if(ws.readyState === WebSocket.OPEN) ws.send('PING :keepalive');
+      }, 4 * 60 * 1000);
+    }
+
+    connect();
+  }
+
+  async function start(){
+    if(CONFIG.DEBUG) console.log('[chat-overlay] chargement des badges...');
+    await loadBadges();
+    if(CONFIG.DEBUG) console.log('[chat-overlay] badges charges :', Object.keys(badgeMap).length);
+
+    connectTwitchIRC(CONFIG.CHANNEL, {
+      onConnected: () => {
+        console.log('[chat-overlay] [OK] connecte - en ecoute sur #'+CONFIG.CHANNEL);
+        if(CONFIG.DEBUG){
+          addMessage({ 'display-name':'Overlay', color:'#c9a15a', badges:{} }, "connecte et en ecoute sur #"+CONFIG.CHANNEL+" - ce message de test disparait normalement a la reception d'un vrai message.");
+        }
+      },
+      onDisconnected: () => {
+        console.warn('[chat-overlay] [ATTENTION] deconnecte, reconnexion dans 3s...');
+      },
+      onMessage: (tags, message) => {
+        if(CONFIG.DEBUG) console.log('[chat-overlay] message recu de', tags.username, ':', message);
+        addMessage(tags, message);
+      },
+    });
+  }
+
+  start();
+
+})();
+</script>
+
+</body>
+</html>
