@@ -72,31 +72,41 @@
   }
   .msg.side-left{ align-self:flex-start; }
   .msg.side-right{ align-self:flex-end; }
-  .msg.side-right .line-wrap{ float:right; }
-  .msg.side-right .msg-body{ text-align:right; clear:both; }
 
-  .msg-body{ min-width:0; display:flex; flex-direction:column; gap:0; }
+  .msg-body{ min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:0; }
 
   /* ---- Chaque ligne (pseudo, texte) est un trait de pinceau independant ---- */
   .line-wrap{
     position:relative;
     display:inline-block;
     padding:6px 14px;
-    clip-path: inset(0 100% 0 0);
+    clip-path: inset(-10px calc(100% + 16px) -10px -16px);
     animation: paint-reveal 0.55s steps(16,end) both;
   }
   .name-line{ animation-delay:0s; margin-bottom:-10px; }
   .text-line{ animation-delay:0.3s; z-index:1; }
 
   @keyframes paint-reveal{
-    to{ clip-path: inset(0 0% 0 0); }
+    to{ clip-path: inset(-10px -16px -10px -16px); }
   }
 
-  .msg.leaving .line-wrap{
-    animation: paint-hide 0.4s steps(12,end) forwards;
+  .msg.leaving .brush{
+    transition: opacity 0.6s ease;
+    opacity:0;
   }
-  @keyframes paint-hide{
-    to{ clip-path: inset(0 0 0 100%); }
+  .msg.leaving .username,
+  .msg.leaving .text{
+    animation: text-fade-out 0.6s ease forwards;
+  }
+  @keyframes text-fade-out{
+    from{
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 0%);
+              mask-image: linear-gradient(90deg, transparent 0%, black 0%);
+    }
+    to{
+      -webkit-mask-image: linear-gradient(90deg, transparent 100%, black 100%);
+              mask-image: linear-gradient(90deg, transparent 100%, black 100%);
+    }
   }
 
   .brush{
@@ -117,7 +127,6 @@
     border-radius:50%;
     filter:blur(0.3px);
   }
-  .msg.side-right .brush::after{ right:auto; left:-10px; }
 
   /* ---- Le contenu (badges + texte), par-dessus le trait ---- */
   .msg-content{
@@ -144,6 +153,8 @@
     font-size:calc(var(--username-size) - 4px);
     letter-spacing:0.3px;
     color:#d8d5cd;
+    -webkit-text-stroke:0.6px white;
+    paint-order:stroke fill;
   }
 
   .text{
@@ -154,6 +165,8 @@
     word-break:break-word;
     position:relative;
     z-index:1;
+    -webkit-text-stroke:0.6px white;
+    paint-order:stroke fill;
   }
 
   .emote{
@@ -292,12 +305,35 @@
       if(CONFIG.MESSAGE_LIFETIME_MS > 0){
         setTimeout(()=>{
           el.classList.add('leaving');
-          setTimeout(()=> el.remove(), 950);
+          setTimeout(()=> flipRemove(el), 650);
         }, CONFIG.MESSAGE_LIFETIME_MS);
       }
     }catch(err){
       console.error('[chat-overlay] [ERREUR] erreur lors de l\'affichage du message :', err, tags, message);
     }
+  }
+
+  function flipRemove(el){
+    const msgs = Array.from(root.children);
+    const firstRects = new Map();
+    msgs.forEach(m => firstRects.set(m, m.getBoundingClientRect()));
+
+    el.remove();
+
+    const remaining = Array.from(root.children);
+    remaining.forEach(m => {
+      const first = firstRects.get(m);
+      if(!first) return;
+      const last = m.getBoundingClientRect();
+      const deltaY = first.top - last.top;
+      if(Math.abs(deltaY) < 0.5) return;
+      m.style.transition = 'none';
+      m.style.transform = `translateY(${deltaY}px)`;
+      requestAnimationFrame(() => {
+        m.style.transition = 'transform 0.45s cubic-bezier(.4,0,.2,1)';
+        m.style.transform = '';
+      });
+    });
   }
 
   window.addEventListener('error', (e) => {
