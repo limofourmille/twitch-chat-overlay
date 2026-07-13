@@ -199,7 +199,7 @@
     MESSAGE_LIFETIME_MS: 18000,       // 0 = les messages restent indefiniment
     SHOW_BADGES: true,
     SHOW_EMOTES: true,
-    DEBUG: true,                      // TEMPORAIRE - pour diagnostiquer le bug de glissement
+    DEBUG: false,                      // passe a true pour reafficher le message de test + logs console
   };
   /* ====================================================== */
 
@@ -355,9 +355,11 @@
       m.style.transition = 'none';
       m.style.transform = `translateY(${deltaY}px)`;
       requestAnimationFrame(() => {
-        m.style.transition = 'transform 0.45s cubic-bezier(.4,0,.2,1)';
-        m.style.transform = '';
-        if(CONFIG.DEBUG) console.log(tag, 'animation demarree');
+        requestAnimationFrame(() => {
+          m.style.transition = 'transform 0.45s cubic-bezier(.4,0,.2,1)';
+          m.style.transform = '';
+          if(CONFIG.DEBUG) console.log(tag, 'animation demarree');
+        });
       });
     });
   }
