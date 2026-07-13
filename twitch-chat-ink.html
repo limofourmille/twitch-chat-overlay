@@ -130,16 +130,6 @@
   .text{ animation-delay:0.45s; }
   @keyframes content-in{ to{ opacity:1; } }
 
-  .brush::after{
-    content:"";
-    position:absolute;
-    right:-10px; top:35%;
-    width:4px; height:4px;
-    background:#0a0806;
-    border-radius:50%;
-    filter:blur(0.3px);
-  }
-
   /* ---- Le contenu (badges + texte), par-dessus le trait ---- */
   .msg-content{
     position:relative;
@@ -165,7 +155,8 @@
     font-size:calc(var(--username-size) - 4px);
     letter-spacing:0.3px;
     color:white;
-    -webkit-text-stroke:1.5px black;
+    -webkit-text-stroke:2.5px black;
+    text-shadow: 0 0 4px black, 0 0 4px black, 0 0 8px black;
     paint-order:stroke fill;
   }
 
@@ -177,7 +168,8 @@
     word-break:break-word;
     position:relative;
     z-index:2;
-    -webkit-text-stroke:1.5px black;
+    -webkit-text-stroke:2.5px black;
+    text-shadow: 0 0 4px black, 0 0 4px black, 0 0 8px black;
     paint-order:stroke fill;
   }
 
