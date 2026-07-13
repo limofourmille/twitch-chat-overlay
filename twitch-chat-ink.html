@@ -164,20 +164,20 @@
     font-weight:700;
     font-size:calc(var(--username-size) - 4px);
     letter-spacing:0.3px;
-    color:#d8d5cd;
-    -webkit-text-stroke:0.75px black;
+    color:white;
+    -webkit-text-stroke:6px black;
     paint-order:stroke fill;
   }
 
   .text{
-    color:var(--paper);
+    color:white;
     font-family:'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
     font-size:calc(var(--text-size) + 2px);
     line-height:1.4;
     word-break:break-word;
     position:relative;
     z-index:2;
-    -webkit-text-stroke:0.75px black;
+    -webkit-text-stroke:6px black;
     paint-order:stroke fill;
   }
 
@@ -283,6 +283,84 @@
   ];
   function randomBrushImage(){ return BRUSH_IMAGES[Math.floor(Math.random() * BRUSH_IMAGES.length)]; }
 
+  // Zone reellement encree (non transparente) de chaque PNG, mesuree une fois
+  // sur les fichiers sources (le canvas de chaque brush a des marges vides
+  // de tailles differentes). Sert a recadrer le background pour que l'encre -
+  // et non le canvas entier - remplisse exactement la boite du texte.
+  const BRUSH_INK_BOUNDS = {
+    'assets/brush-01.png': {x0:0.034, x1:0.935, y0:0.033, y1:0.910},
+    'assets/brush-02.png': {x0:0.024, x1:0.952, y0:0.057, y1:0.932},
+    'assets/brush-03.png': {x0:0.015, x1:0.888, y0:0.073, y1:0.921},
+    'assets/brush-04.png': {x0:0.045, x1:0.952, y0:0.075, y1:0.951},
+    'assets/brush-05.png': {x0:0.011, x1:0.972, y0:0.087, y1:0.937},
+    'assets/brush-06.png': {x0:0.013, x1:0.929, y0:0.056, y1:0.888},
+    'assets/brush-07.png': {x0:0.014, x1:0.922, y0:0.098, y1:0.908},
+    'assets/brush-08.png': {x0:0.009, x1:0.901, y0:0.039, y1:0.984},
+    'assets/brush-09.png': {x0:0.055, x1:0.942, y0:0.163, y1:0.876},
+    'assets/brush-10.png': {x0:0.044, x1:0.929, y0:0.035, y1:0.855},
+  };
+
+  // Calcule le background-size / background-position necessaires pour que la
+  // zone encree (BRUSH_INK_BOUNDS) recouvre exactement l'element, quelle que
+  // soit sa taille (formule classique de recadrage de background via % ).
+  function brushBackgroundStyle(imgPath){
+    const b = BRUSH_INK_BOUNDS[imgPath];
+    if(!b) return { size:'100% 100%', position:'0% 0%' };
+    const wFrac = b.x1 - b.x0, hFrac = b.y1 - b.y0;
+    const sizeX = 100 / wFrac, sizeY = 100 / hFrac;
+    const posX = 100 * b.x0 / (1 - wFrac), posY = 100 * b.y0 / (1 - hFrac);
+    return { size: `${sizeX.toFixed(2)}% ${sizeY.toFixed(2)}%`, position: `${posX.toFixed(2)}% ${posY.toFixed(2)}%` };
+  }
+
+  function applyBrushImage(brushEl, imgPath){
+    const { size, position } = brushBackgroundStyle(imgPath);
+    brushEl.style.backgroundImage = `url('${imgPath}')`;
+    brushEl.style.backgroundSize = size;
+    brushEl.style.backgroundPosition = position;
+  }
+
+  function waitForImages(container){
+    const imgs = Array.from(container.querySelectorAll('img'));
+    if(imgs.length === 0) return Promise.resolve();
+    return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(res => {
+      img.addEventListener('load', res, {once:true});
+      img.addEventListener('error', res, {once:true});
+    })));
+  }
+
+  // Decoupe le texte rendu en ses lignes visuelles reelles (via Range.getClientRects)
+  // et pose une brush independante, aleatoire, sur chacune.
+  function paintTextBrushes(lineWrap, textEl){
+    const range = document.createRange();
+    range.selectNodeContents(textEl);
+    const rects = Array.from(range.getClientRects());
+    if(rects.length === 0) return;
+
+    const wrapRect = lineWrap.getBoundingClientRect();
+    const PAD_X = 14, PAD_Y = 8;
+
+    rects.forEach((r, i) => {
+      const brush = document.createElement('div');
+      brush.className = 'brush';
+      applyBrushImage(brush, randomBrushImage());
+      brush.style.left   = (r.left - wrapRect.left - PAD_X) + 'px';
+      brush.style.top    = (r.top - wrapRect.top - PAD_Y) + 'px';
+      brush.style.width  = (r.width + PAD_X * 2) + 'px';
+      brush.style.height = (r.height + PAD_Y * 2) + 'px';
+      brush.style.right  = 'auto';
+      brush.style.bottom = 'auto';
+      brush.style.animationDelay = (0.3 + i * 0.08) + 's';
+      lineWrap.insertBefore(brush, lineWrap.firstChild);
+    });
+  }
+
+  // Attend que les emotes (images inline) soient chargees pour ne pas mesurer
+  // des lignes qui vont encore bouger (getClientRects force un reflow synchrone,
+  // pas besoin d'attendre une frame de rendu).
+  function scheduleTextBrushes(lineWrap, textEl){
+    waitForImages(textEl).then(() => paintTextBrushes(lineWrap, textEl));
+  }
+
   function addMessage(tags, message){
     try{
       const el = document.createElement('div');
@@ -291,23 +369,30 @@
 
       const displayName = tags['display-name'] || tags.username;
 
+      const nameBrushImg = randomBrushImage();
+      const nameBrushStyle = brushBackgroundStyle(nameBrushImg);
+
       el.innerHTML = `
         <div class="msg-body">
           <div class="line-wrap name-line">
-            <div class="brush" style="background-image:url('${randomBrushImage()}')"></div>
+            <div class="brush" style="background-image:url('${nameBrushImg}');background-size:${nameBrushStyle.size};background-position:${nameBrushStyle.position};"></div>
             <div class="msg-content">
               ${renderBadges(tags)}
               <span class="username">${escapeHtml(displayName)}</span>
             </div>
           </div>
           <div class="line-wrap text-line">
-            <div class="brush" style="background-image:url('${randomBrushImage()}')"></div>
             <span class="text">${renderMessageText(message, tags)}</span>
           </div>
         </div>
       `;
 
       withFlip(() => root.appendChild(el));
+
+      // Une brush independante par ligne visuelle reelle (pas une seule
+      // etiree sur tout le bloc) : evite que le texte deborde dans le
+      // vide quand le message est long / wrap sur plusieurs lignes.
+      scheduleTextBrushes(el.querySelector('.text-line'), el.querySelector('.text'));
 
       // Purge si trop de messages (animee elle aussi, plus de teleportation)
       if(root.children.length > CONFIG.MAX_MESSAGES){
