@@ -84,7 +84,7 @@
     animation: paint-reveal 0.55s steps(16,end) both;
   }
   .name-line{ animation-delay:0s; margin-bottom:-10px; }
-  .text-line{ animation-delay:0.3s; z-index:1; }
+  .text-line{ animation-delay:0.3s; }
 
   @keyframes paint-reveal{
     to{ clip-path: inset(-10px -16px -10px -16px); }
@@ -131,7 +131,7 @@
   /* ---- Le contenu (badges + texte), par-dessus le trait ---- */
   .msg-content{
     position:relative;
-    z-index:1;
+    z-index:2;
     display:flex;
     align-items:center;
     gap:6px;
@@ -164,7 +164,7 @@
     line-height:1.4;
     word-break:break-word;
     position:relative;
-    z-index:1;
+    z-index:2;
     -webkit-text-stroke:0.6px white;
     paint-order:stroke fill;
   }
@@ -297,15 +297,19 @@
 
       root.appendChild(el);
 
-      // Purge si trop de messages
-      while(root.children.length > CONFIG.MAX_MESSAGES){
-        root.removeChild(root.firstElementChild);
+      // Purge si trop de messages (animee elle aussi, plus de teleportation)
+      if(root.children.length > CONFIG.MAX_MESSAGES){
+        withFlip(() => {
+          while(root.children.length > CONFIG.MAX_MESSAGES){
+            root.removeChild(root.firstElementChild);
+          }
+        });
       }
 
       if(CONFIG.MESSAGE_LIFETIME_MS > 0){
         setTimeout(()=>{
           el.classList.add('leaving');
-          setTimeout(()=> flipRemove(el), 650);
+          setTimeout(()=> withFlip(() => el.remove()), 650);
         }, CONFIG.MESSAGE_LIFETIME_MS);
       }
     }catch(err){
@@ -313,12 +317,12 @@
     }
   }
 
-  function flipRemove(el){
+  function withFlip(mutateFn){
     const msgs = Array.from(root.children);
     const firstRects = new Map();
     msgs.forEach(m => firstRects.set(m, m.getBoundingClientRect()));
 
-    el.remove();
+    mutateFn();
 
     const remaining = Array.from(root.children);
     remaining.forEach(m => {
