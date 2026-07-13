@@ -80,15 +80,8 @@
     position:relative;
     display:inline-block;
     padding:6px 14px;
-    clip-path: inset(-10px calc(100% + 16px) -10px -16px);
-    animation: paint-reveal 0.55s steps(16,end) both;
   }
-  .name-line{ animation-delay:0s; margin-bottom:-10px; }
-  .text-line{ animation-delay:0.3s; }
-
-  @keyframes paint-reveal{
-    to{ clip-path: inset(-10px -16px -10px -16px); }
-  }
+  .name-line{ margin-bottom:-10px; }
 
   .msg.leaving .brush{
     transition: opacity 0.6s ease;
@@ -109,6 +102,9 @@
     }
   }
 
+  /* Le clip-path (et donc le contexte d'empilement qu'il cree) reste
+     confine a la brush elle-meme : le texte n'est jamais isole dans
+     un contexte separe, il reste toujours compare au niveau du .msg */
   .brush{
     position:absolute;
     inset:-8px -14px;
@@ -116,7 +112,23 @@
     background-size:100% 100%;
     background-repeat:no-repeat;
     background-position:center;
+    clip-path: inset(-10px calc(100% + 16px) -10px -16px);
+    animation: paint-reveal 0.55s steps(16,end) both;
   }
+  .name-line .brush{ animation-delay:0s; }
+  .text-line .brush{ animation-delay:0.3s; }
+
+  @keyframes paint-reveal{
+    to{ clip-path: inset(-10px -16px -10px -16px); }
+  }
+
+  .msg-content, .text{
+    opacity:0;
+    animation: content-in 0.3s ease-out both;
+  }
+  .msg-content{ animation-delay:0.15s; }
+  .text{ animation-delay:0.45s; }
+  @keyframes content-in{ to{ opacity:1; } }
 
   .brush::after{
     content:"";
@@ -295,7 +307,7 @@
         </div>
       `;
 
-      root.appendChild(el);
+      withFlip(() => root.appendChild(el));
 
       // Purge si trop de messages (animee elle aussi, plus de teleportation)
       if(root.children.length > CONFIG.MAX_MESSAGES){
