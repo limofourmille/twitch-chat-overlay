@@ -155,9 +155,17 @@
     font-size:calc(var(--username-size) - 4px);
     letter-spacing:0.3px;
     color:white;
-    -webkit-text-stroke:2.5px black;
-    text-shadow: 0 0 4px black, 0 0 4px black, 0 0 8px black;
-    paint-order:stroke fill;
+    /* Contour simule avec des text-shadow decalees plutot que
+       -webkit-text-stroke/paint-order : ces deux proprietes ne sont
+       pas fiables sur toutes les versions de Chromium (le CEF embarque
+       par OBS peut etre bien plus vieux que le navigateur de bureau),
+       et le contour se met alors a "manger" le remplissage blanc. */
+    text-shadow:
+      -2px -2px 0 black,  2px -2px 0 black,
+      -2px  2px 0 black,  2px  2px 0 black,
+      -2px  0   0 black,  2px  0   0 black,
+       0   -2px 0 black,  0    2px 0 black,
+       0 0 6px black;
   }
 
   .text{
@@ -168,9 +176,12 @@
     word-break:break-word;
     position:relative;
     z-index:2;
-    -webkit-text-stroke:2.5px black;
-    text-shadow: 0 0 4px black, 0 0 4px black, 0 0 8px black;
-    paint-order:stroke fill;
+    text-shadow:
+      -2px -2px 0 black,  2px -2px 0 black,
+      -2px  2px 0 black,  2px  2px 0 black,
+      -2px  0   0 black,  2px  0   0 black,
+       0   -2px 0 black,  0    2px 0 black,
+       0 0 6px black;
   }
 
   .emote{
