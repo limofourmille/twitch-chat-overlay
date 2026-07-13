@@ -197,7 +197,7 @@
   const CONFIG = {
     CHANNEL: "maintenance_cacher_de_fou",
     CHANNEL_ID: "1519448225",
-    MAX_MESSAGES: 12,                 // nb de messages affiches simultanement
+    MAX_MESSAGES: 12,                 // plafond max, la purge reelle se fait par hauteur (voir addMessage)
     MESSAGE_LIFETIME_MS: 18000,       // 0 = les messages restent indefiniment
     SHOW_BADGES: true,
     SHOW_EMOTES: true,
@@ -285,6 +285,8 @@
   ];
   function randomBrushImage(){ return BRUSH_IMAGES[Math.floor(Math.random() * BRUSH_IMAGES.length)]; }
 
+  const BRUSH_PAD_X = 14, BRUSH_PAD_Y = 8;
+
   // Zone reellement encree (non transparente) de chaque PNG, mesuree une fois
   // sur les fichiers sources (le canvas de chaque brush a des marges vides
   // de tailles differentes). Sert a recadrer le background pour que l'encre -
@@ -302,20 +304,26 @@
     'assets/brush-10.png': {x0:0.044, x1:0.929, y0:0.035, y1:0.855},
   };
 
-  // Calcule le background-size / background-position necessaires pour que la
-  // zone encree (BRUSH_INK_BOUNDS) recouvre exactement l'element, quelle que
-  // soit sa taille (formule classique de recadrage de background via % ).
-  function brushBackgroundStyle(imgPath){
+  // Calcule un background-size / background-position en px tels que la zone
+  // encree (BRUSH_INK_BOUNDS) recouvre exactement le texte (contentW x
+  // contentH), sans deborder sur le padding autour. Contrairement a un
+  // recadrage en %, qui etire l'encre pour remplir toute la boite (texte +
+  // padding) et donne des brushs coupees net sur les bords, ici le padding
+  // affiche la vraie continuite de l'image (son degrade naturel) au lieu
+  // d'un bout d'encre etire - donc un debut/fin de trait qui s'estompe au
+  // lieu d'etre tranche, tout en garantissant zero vide sous le texte.
+  function brushBackgroundStyle(imgPath, contentW, contentH, padX, padY){
     const b = BRUSH_INK_BOUNDS[imgPath];
-    if(!b) return { size:'100% 100%', position:'0% 0%' };
+    const boxW = contentW + padX * 2, boxH = contentH + padY * 2;
+    if(!b) return { size:`${boxW}px ${boxH}px`, position:'0px 0px' };
     const wFrac = b.x1 - b.x0, hFrac = b.y1 - b.y0;
-    const sizeX = 100 / wFrac, sizeY = 100 / hFrac;
-    const posX = 100 * b.x0 / (1 - wFrac), posY = 100 * b.y0 / (1 - hFrac);
-    return { size: `${sizeX.toFixed(2)}% ${sizeY.toFixed(2)}%`, position: `${posX.toFixed(2)}% ${posY.toFixed(2)}%` };
+    const scaledW = contentW / wFrac, scaledH = contentH / hFrac;
+    const posX = padX - b.x0 * scaledW, posY = padY - b.y0 * scaledH;
+    return { size: `${scaledW.toFixed(2)}px ${scaledH.toFixed(2)}px`, position: `${posX.toFixed(2)}px ${posY.toFixed(2)}px` };
   }
 
-  function applyBrushImage(brushEl, imgPath){
-    const { size, position } = brushBackgroundStyle(imgPath);
+  function applyBrushImage(brushEl, imgPath, contentW, contentH, padX, padY){
+    const { size, position } = brushBackgroundStyle(imgPath, contentW, contentH, padX, padY);
     brushEl.style.backgroundImage = `url('${imgPath}')`;
     brushEl.style.backgroundSize = size;
     brushEl.style.backgroundPosition = position;
@@ -330,37 +338,43 @@
     })));
   }
 
+  // Pose une brush aleatoire sur lineWrap, cadree sur rect (coordonnees
+  // viewport, ex. depuis getBoundingClientRect/getClientRects).
+  function paintBrush(lineWrap, rect, delaySec){
+    const wrapRect = lineWrap.getBoundingClientRect();
+    const brush = document.createElement('div');
+    brush.className = 'brush';
+    applyBrushImage(brush, randomBrushImage(), rect.width, rect.height, BRUSH_PAD_X, BRUSH_PAD_Y);
+    brush.style.left   = (rect.left - wrapRect.left - BRUSH_PAD_X) + 'px';
+    brush.style.top    = (rect.top - wrapRect.top - BRUSH_PAD_Y) + 'px';
+    brush.style.width  = (rect.width + BRUSH_PAD_X * 2) + 'px';
+    brush.style.height = (rect.height + BRUSH_PAD_Y * 2) + 'px';
+    brush.style.right  = 'auto';
+    brush.style.bottom = 'auto';
+    brush.style.animationDelay = delaySec + 's';
+    lineWrap.insertBefore(brush, lineWrap.firstChild);
+  }
+
   // Decoupe le texte rendu en ses lignes visuelles reelles (via Range.getClientRects)
   // et pose une brush independante, aleatoire, sur chacune.
   function paintTextBrushes(lineWrap, textEl){
     const range = document.createRange();
     range.selectNodeContents(textEl);
     const rects = Array.from(range.getClientRects());
-    if(rects.length === 0) return;
-
-    const wrapRect = lineWrap.getBoundingClientRect();
-    const PAD_X = 14, PAD_Y = 8;
-
-    rects.forEach((r, i) => {
-      const brush = document.createElement('div');
-      brush.className = 'brush';
-      applyBrushImage(brush, randomBrushImage());
-      brush.style.left   = (r.left - wrapRect.left - PAD_X) + 'px';
-      brush.style.top    = (r.top - wrapRect.top - PAD_Y) + 'px';
-      brush.style.width  = (r.width + PAD_X * 2) + 'px';
-      brush.style.height = (r.height + PAD_Y * 2) + 'px';
-      brush.style.right  = 'auto';
-      brush.style.bottom = 'auto';
-      brush.style.animationDelay = (0.3 + i * 0.08) + 's';
-      lineWrap.insertBefore(brush, lineWrap.firstChild);
-    });
+    rects.forEach((r, i) => paintBrush(lineWrap, r, 0.3 + i * 0.08));
   }
 
-  // Attend que les emotes (images inline) soient chargees pour ne pas mesurer
-  // des lignes qui vont encore bouger (getClientRects force un reflow synchrone,
-  // pas besoin d'attendre une frame de rendu).
-  function scheduleTextBrushes(lineWrap, textEl){
-    waitForImages(textEl).then(() => paintTextBrushes(lineWrap, textEl));
+  // Le pseudo (badges + nom) ne wrap jamais (flex nowrap) : une seule brush
+  // cadree sur le bloc entier suffit.
+  function paintNameBrush(lineWrap, contentEl){
+    paintBrush(lineWrap, contentEl.getBoundingClientRect(), 0);
+  }
+
+  // Attend que les images (emotes / badges) soient chargees pour ne pas
+  // mesurer un bloc qui va encore bouger (getClientRects force un reflow
+  // synchrone, pas besoin d'attendre une frame de rendu).
+  function scheduleBrushes(lineWrap, measureEl, paintFn){
+    waitForImages(measureEl).then(() => paintFn(lineWrap, measureEl));
   }
 
   function addMessage(tags, message){
@@ -371,13 +385,9 @@
 
       const displayName = tags['display-name'] || tags.username;
 
-      const nameBrushImg = randomBrushImage();
-      const nameBrushStyle = brushBackgroundStyle(nameBrushImg);
-
       el.innerHTML = `
         <div class="msg-body">
           <div class="line-wrap name-line">
-            <div class="brush" style="background-image:url('${nameBrushImg}');background-size:${nameBrushStyle.size};background-position:${nameBrushStyle.position};"></div>
             <div class="msg-content">
               ${renderBadges(tags)}
               <span class="username">${escapeHtml(displayName)}</span>
@@ -389,21 +399,31 @@
         </div>
       `;
 
-      withFlip(() => root.appendChild(el));
+      // Ajout + purge dans un seul withFlip : deux appels separes capturent
+      // chacun leur propre avant/apres et lancent chacun leur propre double
+      // rAF, et le nouveau message (ignore par le 1er appel puisqu'il
+      // n'existait pas encore, mais capture par le 2nd) se retrouvait avec
+      // deux animations de transform concurrentes qui le faisaient flickerer.
+      withFlip(() => {
+        root.appendChild(el);
+
+        // Purge par hauteur reelle plutot que par simple nombre : la taille
+        // de la source navigateur dans OBS est fixe, et un message qui wrap
+        // sur plusieurs lignes prend bien plus de place qu'un message court.
+        // MAX_MESSAGES reste un garde-fou secondaire (evite un DOM sans
+        // limite si tous les messages sont tres courts).
+        const maxHeight = window.innerHeight * 0.92;
+        while(root.children.length > 1
+          && (root.children.length > CONFIG.MAX_MESSAGES || root.scrollHeight > maxHeight)){
+          root.removeChild(root.firstElementChild);
+        }
+      });
 
       // Une brush independante par ligne visuelle reelle (pas une seule
       // etiree sur tout le bloc) : evite que le texte deborde dans le
       // vide quand le message est long / wrap sur plusieurs lignes.
-      scheduleTextBrushes(el.querySelector('.text-line'), el.querySelector('.text'));
-
-      // Purge si trop de messages (animee elle aussi, plus de teleportation)
-      if(root.children.length > CONFIG.MAX_MESSAGES){
-        withFlip(() => {
-          while(root.children.length > CONFIG.MAX_MESSAGES){
-            root.removeChild(root.firstElementChild);
-          }
-        });
-      }
+      scheduleBrushes(el.querySelector('.name-line'), el.querySelector('.msg-content'), paintNameBrush);
+      scheduleBrushes(el.querySelector('.text-line'), el.querySelector('.text'), paintTextBrushes);
 
       if(CONFIG.MESSAGE_LIFETIME_MS > 0){
         setTimeout(()=>{
