@@ -199,7 +199,7 @@
     MESSAGE_LIFETIME_MS: 18000,       // 0 = les messages restent indefiniment
     SHOW_BADGES: true,
     SHOW_EMOTES: true,
-    DEBUG: false,                      // passe a true pour reafficher le message de test + logs console
+    DEBUG: true,                      // TEMPORAIRE - pour diagnostiquer le bug de glissement
   };
   /* ====================================================== */
 
@@ -337,17 +337,27 @@
     mutateFn();
 
     const remaining = Array.from(root.children);
-    remaining.forEach(m => {
+    remaining.forEach((m, i) => {
+      const isLast = (i === remaining.length - 1);
+      const tag = isLast ? '[flip][DERNIER]' : '[flip]';
       const first = firstRects.get(m);
-      if(!first) return;
+      if(!first){
+        if(CONFIG.DEBUG) console.log(tag, 'element sans rect avant (nouveau) - ignore');
+        return;
+      }
       const last = m.getBoundingClientRect();
       const deltaY = first.top - last.top;
-      if(Math.abs(deltaY) < 0.5) return;
+      if(CONFIG.DEBUG) console.log(tag, 'top avant=', first.top.toFixed(1), 'top apres=', last.top.toFixed(1), 'deltaY=', deltaY.toFixed(1), 'transform actuel=', m.style.transform || '(aucun)');
+      if(Math.abs(deltaY) < 0.5){
+        if(CONFIG.DEBUG) console.log(tag, 'delta trop petit, ignore');
+        return;
+      }
       m.style.transition = 'none';
       m.style.transform = `translateY(${deltaY}px)`;
       requestAnimationFrame(() => {
         m.style.transition = 'transform 0.45s cubic-bezier(.4,0,.2,1)';
         m.style.transform = '';
+        if(CONFIG.DEBUG) console.log(tag, 'animation demarree');
       });
     });
   }
