@@ -7,7 +7,7 @@
 <style>
   :root{
     --bg: #000000;
-    --fg: #ffffff;
+    --fg: #c9c9c9;
     --panel: #111111;
     --border: rgba(255,255,255,0.25);
     --muted: #999999;
@@ -73,7 +73,7 @@
     width:220px; height:220px;
     margin:0 auto 20px;
     position:relative;
-    background:radial-gradient(circle, rgba(255,255,255,0.08), transparent 70%);
+    background:var(--fg);
     border-radius:16px;
   }
   .preview-box img{
@@ -82,28 +82,46 @@
     object-fit:contain;
   }
 
-  .category{ margin-bottom:18px; }
-  .category .cat-label{
+  .tabs{
+    display:flex; flex-wrap:wrap; gap:8px;
+    margin-bottom:16px;
+  }
+  .tab-btn{
+    font-family:inherit;
     font-size:13px;
     font-weight:600;
     color:var(--fg);
+    background:transparent;
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:7px 16px;
     text-transform:uppercase;
     letter-spacing:0.05em;
-    margin-bottom:8px;
+    cursor:pointer;
+  }
+  .tab-btn.active{
+    background:var(--fg);
+    color:#000;
+    border-color:var(--fg);
   }
   .options{
     display:flex; flex-wrap:wrap; gap:10px;
   }
   .option-btn{
     width:96px; height:96px;
-    padding:4px;
+    padding:2px;
     background:var(--fg);
     border:3px solid transparent;
     border-radius:10px;
     display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
     cursor:pointer;
   }
-  .option-btn img{ width:100%; height:100%; object-fit:contain; }
+  .option-btn img{
+    width:100%; height:100%;
+    object-fit:contain;
+    transform:scale(1.6);
+  }
   .option-btn.selected{ border-color:#000; }
   .option-btn.none-btn{ font-size:13px; font-weight:600; color:#000; }
 
@@ -132,7 +150,8 @@
 
     <div class="preview-box" id="preview-box"></div>
 
-    <div id="categories"></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="options" id="options"></div>
 
     <button id="save-btn">Enregistrer mon avatar</button>
     <button class="ghost" id="logout-btn" style="margin-left:8px;">Se deconnecter</button>
@@ -163,11 +182,13 @@
   const previewView = document.getElementById('preview-view');
   const userLoginEl = document.getElementById('user-login');
   const previewBox = document.getElementById('preview-box');
-  const categoriesEl = document.getElementById('categories');
+  const tabsEl = document.getElementById('tabs');
+  const optionsEl = document.getElementById('options');
   const saveStatus = document.getElementById('save-status');
 
   let twitchUser = null; // { id, login }
   let config = manifest.defaultConfig();
+  let activeCategoryKey = manifest.categories[0].key;
 
   function twitchAuthUrl(){
     const params = new URLSearchParams({
@@ -221,41 +242,42 @@
     });
   }
 
-  function renderCategories(){
-    categoriesEl.innerHTML = '';
+  // Un onglet par categorie : un seul groupe d'options visible a la fois,
+  // pour que l'aperçu (au-dessus) reste toujours visible sans avoir a
+  // faire defiler toute la liste des categories.
+  function renderTabs(){
+    tabsEl.innerHTML = '';
     manifest.categories.forEach(cat => {
-      const wrap = document.createElement('div');
-      wrap.className = 'category';
-
-      const label = document.createElement('div');
-      label.className = 'cat-label';
-      label.textContent = cat.label;
-      wrap.appendChild(label);
-
-      const options = document.createElement('div');
-      options.className = 'options';
-
-      if(cat.optional){
-        const noneBtn = document.createElement('button');
-        noneBtn.className = 'option-btn none-btn' + (config[cat.key] ? '' : ' selected');
-        noneBtn.textContent = 'Aucun';
-        noneBtn.onclick = () => { config[cat.key] = null; renderPreview(); renderCategories(); };
-        options.appendChild(noneBtn);
-      }
-
-      for(let i = 1; i <= cat.count; i++){
-        const btn = document.createElement('button');
-        btn.className = 'option-btn' + (config[cat.key] === i ? ' selected' : '');
-        const img = document.createElement('img');
-        img.src = manifest.partPath(cat.key, i);
-        btn.appendChild(img);
-        btn.onclick = () => { config[cat.key] = i; renderPreview(); renderCategories(); };
-        options.appendChild(btn);
-      }
-
-      wrap.appendChild(options);
-      categoriesEl.appendChild(wrap);
+      const btn = document.createElement('button');
+      btn.className = 'tab-btn' + (cat.key === activeCategoryKey ? ' active' : '');
+      btn.textContent = cat.label;
+      btn.onclick = () => { activeCategoryKey = cat.key; renderTabs(); renderOptions(); };
+      tabsEl.appendChild(btn);
     });
+  }
+
+  function renderOptions(){
+    optionsEl.innerHTML = '';
+    const cat = manifest.categories.find(c => c.key === activeCategoryKey);
+    if(!cat) return;
+
+    if(cat.optional){
+      const noneBtn = document.createElement('button');
+      noneBtn.className = 'option-btn none-btn' + (config[cat.key] ? '' : ' selected');
+      noneBtn.textContent = 'Aucun';
+      noneBtn.onclick = () => { config[cat.key] = null; renderPreview(); renderOptions(); };
+      optionsEl.appendChild(noneBtn);
+    }
+
+    for(let i = 1; i <= cat.count; i++){
+      const btn = document.createElement('button');
+      btn.className = 'option-btn' + (config[cat.key] === i ? ' selected' : '');
+      const img = document.createElement('img');
+      img.src = manifest.partPath(cat.key, i);
+      btn.appendChild(img);
+      btn.onclick = () => { config[cat.key] = i; renderPreview(); renderOptions(); };
+      optionsEl.appendChild(btn);
+    }
   }
 
   async function saveConfig(){
@@ -290,7 +312,8 @@
     userLoginEl.textContent = twitchUser.login;
     config = await loadSavedConfig(twitchUser.id);
     renderPreview();
-    renderCategories();
+    renderTabs();
+    renderOptions();
   }
 
   document.getElementById('login-btn').addEventListener('click', () => {
