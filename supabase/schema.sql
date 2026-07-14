@@ -8,6 +8,7 @@ create table if not exists avatar_customizations (
   hat            smallint,
   antenna        smallint,
   object         smallint,
+  mandible       smallint,
   updated_at     timestamptz not null default now()
 );
 
@@ -38,3 +39,8 @@ create policy "avatar_customizations_public_update_PROTOTYPE_ONLY"
   on avatar_customizations
   for update
   using (true);
+
+-- MIGRATION - a lancer une seule fois si ton projet existait deja avant
+-- l'ajout de la categorie "mandible" (sinon la colonne n'existe pas encore
+-- et les sauvegardes echoueront une fois la categorie reactivee) :
+-- alter table avatar_customizations add column if not exists mandible smallint;
