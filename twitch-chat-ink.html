@@ -236,7 +236,6 @@
   const sb = (CONFIG.SUPABASE_URL !== 'REMPLACE_MOI' && window.supabase)
     ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
     : null;
-  const avatarConfigCache = new Map(); // login -> Promise<config|null>
 
   const root = document.getElementById('chat-root');
   let badgeMap = {}; // "badge-set/version" -> image url
@@ -331,13 +330,16 @@
     return AVATAR_IMAGES[Math.abs(hash) % AVATAR_IMAGES.length];
   }
 
-  // Va chercher (une seule fois par login, resultat mis en cache) l'avatar
-  // modulaire personnalise via avatar-editor.html. Si Supabase n'est pas
+  // Va chercher l'avatar modulaire personnalise via avatar-editor.html.
+  // Interroge Supabase a chaque message (pas de cache) : un chat genere
+  // bien trop peu de lectures pour que ca compte, et mettre en cache
+  // empechait un changement d'avatar en cours de stream d'etre jamais pris
+  // en compte tant qu'OBS n'etait pas relance. Si Supabase n'est pas
   // configure ou que le viewer n'a rien personnalise, on garde simplement
   // l'avatar fixe (fallback) deja affiche par pickAvatar.
   function fetchAvatarConfig(username){
-    if(avatarConfigCache.has(username)) return avatarConfigCache.get(username);
-    const promise = (!sb) ? Promise.resolve(null) : sb
+    if(!sb) return Promise.resolve(null);
+    return sb
       .from('avatar_customizations')
       .select('*')
       .eq('twitch_login', username)
@@ -347,8 +349,6 @@
         return data || null;
       })
       .catch(err => { console.error('[chat-overlay] avatar personnalise:', err); return null; });
-    avatarConfigCache.set(username, promise);
-    return promise;
   }
 
   async function resolveAvatar(username, containerEl){
