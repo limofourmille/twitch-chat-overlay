@@ -84,14 +84,15 @@
 
   /* Avatar fixe par utilisateur, perche au-dessus du debut du pseudo :
      sa moitie haute depasse librement au-dessus de la ligne, sa moitie
-     basse plonge derriere la brush du pseudo (z-index < .brush). */
+     basse plonge derriere la brush du pseudo (z-index < .brush). C'est un
+     conteneur : soit un avatar fixe (fallback), soit un empilement de
+     pieces modulaires venant de Supabase (voir resolveAvatar). */
   .avatar{
     position:absolute;
     left:-10px;
     top:-70px;
     width:102px;
     height:102px;
-    object-fit:contain;
     z-index:-1;
     pointer-events:none;
   }
@@ -203,22 +204,39 @@
     vertical-align:middle;
     margin:-2px 1px;
   }
+
+  .avatar img{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+  }
 </style>
 
+<script src="assets/parts-manifest.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
 
   /* ====================== CONFIG ====================== */
   const CONFIG = {
-    CHANNEL: "maintenance_cacher_de_fou",
-    CHANNEL_ID: "1519448225",
+    CHANNEL: "LimoFourmille",
+    CHANNEL_ID: "1478240165",
     MAX_MESSAGES: 12,                 // plafond max, la purge reelle se fait par hauteur (voir addMessage)
     MESSAGE_LIFETIME_MS: 18000,       // 0 = les messages restent indefiniment
     SHOW_BADGES: true,
     SHOW_EMOTES: true,
     DEBUG: false,                      // passe a true pour reafficher le message de test + logs console
+    SUPABASE_URL: 'https://nvqddjwfzuusvmfwilyh.supabase.co',       // meme projet Supabase que avatar-editor.html
+    SUPABASE_ANON_KEY: 'sb_publishable_z9m2o_qjOP5Evrn_sR8uOw_vgeSIywz',
   };
   /* ====================================================== */
+
+  const sb = (CONFIG.SUPABASE_URL !== 'REMPLACE_MOI' && window.supabase)
+    ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+    : null;
+  const avatarConfigCache = new Map(); // login -> Promise<config|null>
 
   const root = document.getElementById('chat-root');
   let badgeMap = {}; // "badge-set/version" -> image url
@@ -311,6 +329,40 @@
       hash = (hash * 31 + username.charCodeAt(i)) | 0;
     }
     return AVATAR_IMAGES[Math.abs(hash) % AVATAR_IMAGES.length];
+  }
+
+  // Va chercher (une seule fois par login, resultat mis en cache) l'avatar
+  // modulaire personnalise via avatar-editor.html. Si Supabase n'est pas
+  // configure ou que le viewer n'a rien personnalise, on garde simplement
+  // l'avatar fixe (fallback) deja affiche par pickAvatar.
+  function fetchAvatarConfig(username){
+    if(avatarConfigCache.has(username)) return avatarConfigCache.get(username);
+    const promise = (!sb) ? Promise.resolve(null) : sb
+      .from('avatar_customizations')
+      .select('*')
+      .eq('twitch_login', username)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if(error){ console.error('[chat-overlay] avatar personnalise:', error); return null; }
+        return data || null;
+      })
+      .catch(err => { console.error('[chat-overlay] avatar personnalise:', err); return null; });
+    avatarConfigCache.set(username, promise);
+    return promise;
+  }
+
+  async function resolveAvatar(username, containerEl){
+    const cfg = await fetchAvatarConfig(username);
+    if(!cfg || !containerEl.isConnected) return;
+    const manifest = window.AVATAR_PARTS_MANIFEST;
+    containerEl.innerHTML = '';
+    manifest.renderOrder.forEach(cat => {
+      const idx = cfg[cat];
+      if(!idx) return;
+      const img = document.createElement('img');
+      img.src = manifest.partPath(cat, idx);
+      containerEl.appendChild(img);
+    });
   }
 
   const BRUSH_PAD_X = 14, BRUSH_PAD_Y = 8;
@@ -412,12 +464,13 @@
       el.className = 'msg ' + side;
 
       const displayName = tags['display-name'] || tags.username;
-      const avatarImg = pickAvatar(tags.username || displayName);
+      const username = tags.username || displayName;
+      const avatarImg = pickAvatar(username);
 
       el.innerHTML = `
         <div class="msg-body">
           <div class="line-wrap name-line">
-            <img class="avatar" src="${avatarImg}" alt="">
+            <div class="avatar"><img src="${avatarImg}" alt=""></div>
             <div class="msg-content">
               ${renderBadges(tags)}
               <span class="username">${escapeHtml(displayName)}</span>
@@ -454,6 +507,10 @@
       // vide quand le message est long / wrap sur plusieurs lignes.
       scheduleBrushes(el.querySelector('.name-line'), el.querySelector('.msg-content'), paintNameBrush);
       scheduleBrushes(el.querySelector('.text-line'), el.querySelector('.text'), paintTextBrushes);
+
+      // Avatar personnalise (asynchrone, Supabase) : remplace le fallback
+      // fixe s'il existe, sinon on garde l'avatar affiche ci-dessus.
+      resolveAvatar(username, el.querySelector('.avatar'));
 
       if(CONFIG.MESSAGE_LIFETIME_MS > 0){
         setTimeout(()=>{

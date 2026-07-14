@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cree ton avatar</title>
+<style>
+  :root{
+    --ink-black: #16110d;
+    --ink-indigo: #262038;
+    --paper: #f2ead9;
+    --gold: #c9a15a;
+    --panel: #1c1720;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0;
+    background:var(--ink-indigo);
+    color:var(--paper);
+    font-family:'Segoe UI', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:640px;
+    margin:0 auto;
+    padding:32px 20px 64px;
+  }
+  h1{
+    font-size:22px;
+    margin:0 0 4px;
+  }
+  p.sub{
+    color:#c9c2b0;
+    margin:0 0 24px;
+    font-size:14px;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid rgba(201,161,90,0.25);
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  button{
+    font-family:inherit;
+    font-size:14px;
+    font-weight:600;
+    color:var(--ink-black);
+    background:var(--gold);
+    border:none;
+    border-radius:8px;
+    padding:10px 18px;
+    cursor:pointer;
+  }
+  button:hover{ filter:brightness(1.08); }
+  button:disabled{ opacity:0.5; cursor:not-allowed; }
+  button.ghost{
+    background:transparent;
+    color:var(--paper);
+    border:1px solid rgba(201,161,90,0.4);
+  }
+
+  #preview-view{ display:none; }
+  .user-badge{
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:16px;
+    font-size:14px;
+    color:#c9c2b0;
+  }
+  .user-badge strong{ color:var(--paper); }
+
+  .preview-box{
+    width:220px; height:220px;
+    margin:0 auto 20px;
+    position:relative;
+    background:radial-gradient(circle, rgba(255,255,255,0.05), transparent 70%);
+    border-radius:16px;
+  }
+  .preview-box img{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:contain;
+  }
+
+  .category{ margin-bottom:18px; }
+  .category .cat-label{
+    font-size:13px;
+    font-weight:600;
+    color:var(--gold);
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    margin-bottom:8px;
+  }
+  .options{
+    display:flex; flex-wrap:wrap; gap:8px;
+  }
+  .option-btn{
+    width:56px; height:56px;
+    padding:0;
+    background:rgba(255,255,255,0.06);
+    border:2px solid transparent;
+    border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .option-btn img{ width:80%; height:80%; object-fit:contain; }
+  .option-btn.selected{ border-color:var(--gold); background:rgba(201,161,90,0.15); }
+  .option-btn.none-btn{ font-size:12px; color:#c9c2b0; }
+
+  #save-status{
+    margin-top:12px;
+    font-size:13px;
+    min-height:18px;
+  }
+  #save-status.ok{ color:#8fd18f; }
+  #save-status.err{ color:#e08080; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Cree ton avatar</h1>
+  <p class="sub">Personnalise l'avatar affiche a cote de ton pseudo dans le chat.</p>
+
+  <div id="login-view" class="card">
+    <p>Connecte-toi avec ton compte Twitch pour creer ou modifier ton avatar.</p>
+    <button id="login-btn">Se connecter avec Twitch</button>
+  </div>
+
+  <div id="preview-view" class="card">
+    <div class="user-badge">Connecte en tant que <strong id="user-login">-</strong></div>
+
+    <div class="preview-box" id="preview-box"></div>
+
+    <div id="categories"></div>
+
+    <button id="save-btn">Enregistrer mon avatar</button>
+    <button class="ghost" id="logout-btn" style="margin-left:8px;">Se deconnecter</button>
+    <div id="save-status"></div>
+  </div>
+</div>
+
+<script src="assets/parts-manifest.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+
+  /* ====================== CONFIG A REMPLIR ====================== */
+  const CONFIG = {
+    TWITCH_CLIENT_ID: 'xfjies9ss09hrxsdeg42o2964g1rk4',           // depuis dev.twitch.tv (app enregistree)
+    REDIRECT_URI: location.origin + location.pathname, // doit matcher EXACTEMENT l'URL enregistree sur dev.twitch.tv
+    SUPABASE_URL: 'https://nvqddjwfzuusvmfwilyh.supabase.co',               // depuis le dashboard Supabase (Project Settings > API)
+    SUPABASE_ANON_KEY: 'sb_publishable_z9m2o_qjOP5Evrn_sR8uOw_vgeSIywz',          // idem, cle "anon public"
+  };
+  /* ================================================================ */
+
+  const manifest = window.AVATAR_PARTS_MANIFEST;
+  const sb = (CONFIG.SUPABASE_URL !== 'REMPLACE_MOI')
+    ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+    : null;
+
+  const loginView = document.getElementById('login-view');
+  const previewView = document.getElementById('preview-view');
+  const userLoginEl = document.getElementById('user-login');
+  const previewBox = document.getElementById('preview-box');
+  const categoriesEl = document.getElementById('categories');
+  const saveStatus = document.getElementById('save-status');
+
+  let twitchUser = null; // { id, login }
+  let config = manifest.defaultConfig();
+
+  function twitchAuthUrl(){
+    const params = new URLSearchParams({
+      client_id: CONFIG.TWITCH_CLIENT_ID,
+      redirect_uri: CONFIG.REDIRECT_URI,
+      response_type: 'token',
+      scope: '',
+    });
+    return `https://id.twitch.tv/oauth2/authorize?${params.toString()}`;
+  }
+
+  function extractTokenFromHash(){
+    if(!location.hash) return null;
+    const params = new URLSearchParams(location.hash.slice(1));
+    return params.get('access_token');
+  }
+
+  async function fetchTwitchUser(accessToken){
+    const res = await fetch('https://api.twitch.tv/helix/users', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Client-Id': CONFIG.TWITCH_CLIENT_ID,
+      },
+    });
+    if(!res.ok) throw new Error('Twitch /users a echoue : ' + res.status);
+    const body = await res.json();
+    const u = body.data[0];
+    return { id: u.id, login: u.login };
+  }
+
+  async function loadSavedConfig(userId){
+    if(!sb) return manifest.defaultConfig();
+    const { data, error } = await sb
+      .from('avatar_customizations')
+      .select('*')
+      .eq('twitch_user_id', userId)
+      .maybeSingle();
+    if(error){ console.error('[avatar-editor] chargement config:', error); return manifest.defaultConfig(); }
+    if(!data) return manifest.defaultConfig();
+    return { base: data.base, legs: data.legs, eyes: data.eyes, hat: data.hat, antenna: data.antenna, object: data.object };
+  }
+
+  function renderPreview(){
+    previewBox.innerHTML = '';
+    manifest.renderOrder.forEach(cat => {
+      const idx = config[cat];
+      if(!idx) return;
+      const img = document.createElement('img');
+      img.src = manifest.partPath(cat, idx);
+      previewBox.appendChild(img);
+    });
+  }
+
+  function renderCategories(){
+    categoriesEl.innerHTML = '';
+    manifest.categories.forEach(cat => {
+      const wrap = document.createElement('div');
+      wrap.className = 'category';
+
+      const label = document.createElement('div');
+      label.className = 'cat-label';
+      label.textContent = cat.label;
+      wrap.appendChild(label);
+
+      const options = document.createElement('div');
+      options.className = 'options';
+
+      if(cat.optional){
+        const noneBtn = document.createElement('button');
+        noneBtn.className = 'option-btn none-btn' + (config[cat.key] ? '' : ' selected');
+        noneBtn.textContent = 'Aucun';
+        noneBtn.onclick = () => { config[cat.key] = null; renderPreview(); renderCategories(); };
+        options.appendChild(noneBtn);
+      }
+
+      for(let i = 1; i <= cat.count; i++){
+        const btn = document.createElement('button');
+        btn.className = 'option-btn' + (config[cat.key] === i ? ' selected' : '');
+        const img = document.createElement('img');
+        img.src = manifest.partPath(cat.key, i);
+        btn.appendChild(img);
+        btn.onclick = () => { config[cat.key] = i; renderPreview(); renderCategories(); };
+        options.appendChild(btn);
+      }
+
+      wrap.appendChild(options);
+      categoriesEl.appendChild(wrap);
+    });
+  }
+
+  async function saveConfig(){
+    saveStatus.textContent = 'Enregistrement...';
+    saveStatus.className = '';
+    if(!sb){
+      saveStatus.textContent = 'Supabase non configure (voir CONFIG en haut du script).';
+      saveStatus.className = 'err';
+      return;
+    }
+    const { error } = await sb.from('avatar_customizations').upsert({
+      twitch_user_id: twitchUser.id,
+      twitch_login: twitchUser.login,
+      base: config.base, legs: config.legs, eyes: config.eyes,
+      hat: config.hat, antenna: config.antenna, object: config.object,
+      updated_at: new Date().toISOString(),
+    });
+    if(error){
+      console.error('[avatar-editor] sauvegarde:', error);
+      saveStatus.textContent = 'Erreur lors de la sauvegarde.';
+      saveStatus.className = 'err';
+      return;
+    }
+    saveStatus.textContent = 'Avatar enregistre !';
+    saveStatus.className = 'ok';
+  }
+
+  async function showLoggedIn(){
+    loginView.style.display = 'none';
+    previewView.style.display = 'block';
+    userLoginEl.textContent = twitchUser.login;
+    config = await loadSavedConfig(twitchUser.id);
+    renderPreview();
+    renderCategories();
+  }
+
+  document.getElementById('login-btn').addEventListener('click', () => {
+    if(CONFIG.TWITCH_CLIENT_ID === 'REMPLACE_MOI'){
+      alert("CONFIG.TWITCH_CLIENT_ID n'est pas renseigne dans avatar-editor.html.");
+      return;
+    }
+    location.href = twitchAuthUrl();
+  });
+
+  document.getElementById('save-btn').addEventListener('click', saveConfig);
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    sessionStorage.removeItem('twitch_access_token');
+    twitchUser = null;
+    loginView.style.display = 'block';
+    previewView.style.display = 'none';
+  });
+
+  async function init(){
+    let token = extractTokenFromHash();
+    if(token){
+      sessionStorage.setItem('twitch_access_token', token);
+      history.replaceState(null, '', location.pathname);
+    } else {
+      token = sessionStorage.getItem('twitch_access_token');
+    }
+    if(!token) return;
+
+    try{
+      twitchUser = await fetchTwitchUser(token);
+      await showLoggedIn();
+    }catch(err){
+      console.error('[avatar-editor] auth Twitch:', err);
+      sessionStorage.removeItem('twitch_access_token');
+    }
+  }
+
+  init();
+
+})();
+</script>
+
+</body>
+</html>
