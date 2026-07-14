@@ -100,13 +100,20 @@ dessins :
   `assets/parts-manifest.js`.
 
 **Etat actuel des categories** (`assets/parts-manifest.js`) :
-- Actives : `base`, `eyes`, `antenna`.
+- Actives : `base` (3 options), `eyes` (10 options), `antenna` (9 options).
 - Retiree : `legs` (supprimee du systeme).
-- Desactivees en attendant les dessins : `object`, `hat` - les entrees sont
-  commentees dans `categories` (et dans `renderOrder` pour `object`/`hat`
-  qui restent presentes sans effet). Pour les reactiver : decommente les
-  lignes correspondantes dans `categories`, place les fichiers
-  `object-0X.png` / `hat-0X.png` dans `assets/parts/`, c'est tout.
+- Desactivees en attendant les dessins : `object`, `hat`, `mandible` - les
+  entrees sont commentees dans `categories` (et dans `renderOrder` pour
+  `object`/`hat`/`mandible` qui restent presentes sans effet). Pour
+  reactiver `object` ou `hat` : decommente la ligne correspondante dans
+  `categories`, place les fichiers `object-0X.png` / `hat-0X.png` dans
+  `assets/parts/`, c'est tout.
+- `mandible` a une etape en plus avant de pouvoir etre reactivee : sa
+  colonne n'existe pas encore dans la table Supabase (elle a ete ajoutee
+  au systeme apres coup). Lance d'abord la migration indiquee tout en bas
+  de [`supabase/schema.sql`](supabase/schema.sql) dans le SQL Editor de ton
+  projet Supabase, puis decommente la ligne `mandible` dans `categories` et
+  ajoute les fichiers `mandible-0X.png`.
 
 ## Limite de securite importante (a lire)
 
