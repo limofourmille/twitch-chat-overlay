@@ -82,7 +82,22 @@
   }
   .name-line{ margin-bottom:-10px; z-index:1; }
 
-  .msg.leaving .brush{
+  /* Avatar fixe par utilisateur, perche au-dessus du debut du pseudo :
+     sa moitie haute depasse librement au-dessus de la ligne, sa moitie
+     basse plonge derriere la brush du pseudo (z-index < .brush). */
+  .avatar{
+    position:absolute;
+    left:-10px;
+    top:-70px;
+    width:102px;
+    height:102px;
+    object-fit:contain;
+    z-index:-1;
+    pointer-events:none;
+  }
+
+  .msg.leaving .brush,
+  .msg.leaving .avatar{
     transition: opacity 0.6s ease;
     opacity:0;
   }
@@ -285,6 +300,19 @@
   ];
   function randomBrushImage(){ return BRUSH_IMAGES[Math.floor(Math.random() * BRUSH_IMAGES.length)]; }
 
+  const AVATAR_IMAGES = [
+    'assets/avatar-01.png','assets/avatar-02.png','assets/avatar-03.png','assets/avatar-04.png'
+  ];
+  // Meme utilisateur = toujours le meme avatar (hash du login, stable
+  // contrairement au display-name qui peut varier en casse/unicode).
+  function pickAvatar(username){
+    let hash = 0;
+    for(let i = 0; i < username.length; i++){
+      hash = (hash * 31 + username.charCodeAt(i)) | 0;
+    }
+    return AVATAR_IMAGES[Math.abs(hash) % AVATAR_IMAGES.length];
+  }
+
   const BRUSH_PAD_X = 14, BRUSH_PAD_Y = 8;
 
   // Zone reellement encree (non transparente) de chaque PNG, mesuree une fois
@@ -384,10 +412,12 @@
       el.className = 'msg ' + side;
 
       const displayName = tags['display-name'] || tags.username;
+      const avatarImg = pickAvatar(tags.username || displayName);
 
       el.innerHTML = `
         <div class="msg-body">
           <div class="line-wrap name-line">
+            <img class="avatar" src="${avatarImg}" alt="">
             <div class="msg-content">
               ${renderBadges(tags)}
               <span class="username">${escapeHtml(displayName)}</span>
