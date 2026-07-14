@@ -207,7 +207,7 @@
       .maybeSingle();
     if(error){ console.error('[avatar-editor] chargement config:', error); return manifest.defaultConfig(); }
     if(!data) return manifest.defaultConfig();
-    return { base: data.base, legs: data.legs, eyes: data.eyes, hat: data.hat, antenna: data.antenna, object: data.object };
+    return { base: data.base, eyes: data.eyes, hat: data.hat, antenna: data.antenna, object: data.object };
   }
 
   function renderPreview(){
@@ -269,7 +269,7 @@
     const { error } = await sb.from('avatar_customizations').upsert({
       twitch_user_id: twitchUser.id,
       twitch_login: twitchUser.login,
-      base: config.base, legs: config.legs, eyes: config.eyes,
+      base: config.base, eyes: config.eyes,
       hat: config.hat, antenna: config.antenna, object: config.object,
       updated_at: new Date().toISOString(),
     });

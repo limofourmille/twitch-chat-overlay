@@ -4,7 +4,6 @@ create table if not exists avatar_customizations (
   twitch_user_id text primary key,
   twitch_login   text not null,
   base           smallint not null default 1,
-  legs           smallint not null default 1,
   eyes           smallint not null default 1,
   hat            smallint,
   antenna        smallint,

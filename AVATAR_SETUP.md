@@ -88,8 +88,8 @@ verifier que tout le systeme fonctionne. Pour les remplacer par tes propres
 dessins :
 
 - Garde exactement les memes noms de fichiers (`base-01.png`, `base-02.png`,
-  `base-03.png`, `legs-01.png`, ...) sauf si tu changes aussi le nombre
-  d'options par categorie dans `assets/parts-manifest.js` (`count`).
+  `base-03.png`, ...) sauf si tu changes aussi le nombre d'options par
+  categorie dans `assets/parts-manifest.js` (`count`).
 - Dessine chaque piece sur un canevas de **300x300px**, fond transparent,
   avec les memes points d'ancrage d'une piece a l'autre dans une meme
   categorie (ex. tous les "eyes" doivent etre positionnes pareil sur le
@@ -98,6 +98,15 @@ dessins :
 - Pour ajouter plus d'options (ex. 5 bases au lieu de 3), ajoute les
   fichiers `base-04.png`, `base-05.png` et augmente `count: 5` dans
   `assets/parts-manifest.js`.
+
+**Etat actuel des categories** (`assets/parts-manifest.js`) :
+- Actives : `base`, `eyes`, `antenna`.
+- Retiree : `legs` (supprimee du systeme).
+- Desactivees en attendant les dessins : `object`, `hat` - les entrees sont
+  commentees dans `categories` (et dans `renderOrder` pour `object`/`hat`
+  qui restent presentes sans effet). Pour les reactiver : decommente les
+  lignes correspondantes dans `categories`, place les fichiers
+  `object-0X.png` / `hat-0X.png` dans `assets/parts/`, c'est tout.
 
 ## Limite de securite importante (a lire)
 
