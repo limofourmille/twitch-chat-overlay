@@ -95,7 +95,10 @@
     height:102px;
     z-index:-1;
     pointer-events:none;
+    opacity:0;
+    transition:opacity 0.25s ease;
   }
+  .avatar.avatar-ready{ opacity:1; }
 
   .msg.leaving .brush,
   .msg.leaving .avatar{
@@ -351,18 +354,28 @@
       .catch(err => { console.error('[chat-overlay] avatar personnalise:', err); return null; });
   }
 
+  // Le conteneur .avatar demarre vide (voir addMessage) : on attend de
+  // savoir s'il y a une config Supabase avant d'afficher quoi que ce soit,
+  // pour ne jamais montrer le fallback puis le remplacer par le
+  // personnalise une fraction de seconde plus tard.
   async function resolveAvatar(username, containerEl){
     const cfg = await fetchAvatarConfig(username);
-    if(!cfg || !containerEl.isConnected) return;
+    if(!containerEl.isConnected) return;
     const manifest = window.AVATAR_PARTS_MANIFEST;
-    containerEl.innerHTML = '';
-    manifest.renderOrder.forEach(cat => {
-      const idx = cfg[cat];
-      if(!idx) return;
+    if(cfg){
+      manifest.renderOrder.forEach(cat => {
+        const idx = cfg[cat];
+        if(!idx) return;
+        const img = document.createElement('img');
+        img.src = manifest.partPath(cat, idx);
+        containerEl.appendChild(img);
+      });
+    } else {
       const img = document.createElement('img');
-      img.src = manifest.partPath(cat, idx);
+      img.src = pickAvatar(username);
       containerEl.appendChild(img);
-    });
+    }
+    containerEl.classList.add('avatar-ready');
   }
 
   const BRUSH_PAD_X = 14, BRUSH_PAD_Y = 8;
@@ -465,12 +478,11 @@
 
       const displayName = tags['display-name'] || tags.username;
       const username = tags.username || displayName;
-      const avatarImg = pickAvatar(username);
 
       el.innerHTML = `
         <div class="msg-body">
           <div class="line-wrap name-line">
-            <div class="avatar"><img src="${avatarImg}" alt=""></div>
+            <div class="avatar"></div>
             <div class="msg-content">
               ${renderBadges(tags)}
               <span class="username">${escapeHtml(displayName)}</span>
