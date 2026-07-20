@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overlay coffre</title>
+<style>
+  :root{
+    --fg: #e6e6e6;
+    --muted: #999999;
+    --accent: #f2c14e;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0;
+    width:100%; height:100%;
+    background:transparent;
+    color:var(--fg);
+    font-family:'Segoe UI', sans-serif;
+    overflow:hidden;
+  }
+
+  .stage{
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+
+  /* ---------------------------- Coffre (sprites Seliel the Shaper) ---------------------------- */
+  .chest-wrap{
+    position:relative;
+    width:192px; height:192px;
+    opacity:0;
+    transform:scale(0.9);
+    transition:opacity 0.3s ease, transform 0.3s ease;
+  }
+  .chest-wrap.visible{ opacity:1; transform:scale(1); }
+
+  .chest-sprite{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:contain;
+    image-rendering:pixelated;
+  }
+  .chest-sprite-open{ opacity:0; transition:opacity 0.4s ease; }
+  .chest-wrap.bursting .chest-sprite-closed{ opacity:0; transition:opacity 0.4s ease; }
+  .chest-wrap.bursting .chest-sprite-open{ opacity:1; }
+
+  /* Coffre visible mais pas encore ouvert : un evenement est en attente
+     que le streamer clique "Ouvrir le coffre" dans chest-control.html. */
+  .chest-wrap.idle-bob{ animation: idle-bob 2.4s ease-in-out infinite; }
+  @keyframes idle-bob{
+    0%, 100%{ transform: translateY(0); }
+    50%{ transform: translateY(-6px); }
+  }
+
+  .chest-wrap.shaking{ animation: chest-shake 0.12s infinite; }
+  @keyframes chest-shake{
+    0%{ transform: translateX(0) rotate(0); }
+    25%{ transform: translateX(-4px) rotate(-1.5deg); }
+    50%{ transform: translateX(3px) rotate(1deg); }
+    75%{ transform: translateX(-3px) rotate(-1deg); }
+    100%{ transform: translateX(0) rotate(0); }
+  }
+
+  /* Pas de sprite de fissure dans le pack (seulement ferme/ouvert) : la
+     montee en tension se joue via des a-coups + flashs successifs. */
+  .chest-wrap.pulse{ animation: chest-pulse 0.35s ease; }
+  @keyframes chest-pulse{
+    0%{ transform:scale(1); }
+    50%{ transform:scale(1.12) rotate(-2deg); }
+    100%{ transform:scale(1); }
+  }
+  .impact-flash{
+    position:absolute; left:50%; top:45%;
+    width:140px; height:140px;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(255,240,200,0.9), rgba(242,193,78,0) 70%);
+    opacity:0;
+    pointer-events:none;
+  }
+  .impact-flash.flash{ animation: impact-flash-anim 0.35s ease-out; }
+  @keyframes impact-flash-anim{
+    0%{ opacity:0.9; transform:translate(-50%,-50%) scale(0.6); }
+    100%{ opacity:0; transform:translate(-50%,-50%) scale(1.4); }
+  }
+
+  .burst{
+    position:absolute; left:50%; top:45%;
+    width:10px; height:10px;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(255,240,200,0.95), rgba(242,193,78,0) 70%);
+    opacity:0;
+    pointer-events:none;
+  }
+  .chest-wrap.bursting .burst{
+    animation: burst-pop 0.7s ease-out forwards;
+  }
+  @keyframes burst-pop{
+    0%{ width:10px; height:10px; opacity:1; }
+    100%{ width:420px; height:420px; opacity:0; }
+  }
+
+  /* ---------------------------- Feu d'artifice (flipbook 8 frames) ---------------------------- */
+  .firework{
+    position:absolute; left:50%; top:38%;
+    width:160px; height:160px;
+    transform:translate(-50%,-50%);
+    image-rendering:pixelated;
+    object-fit:contain;
+    opacity:0;
+    pointer-events:none;
+  }
+  .firework.playing{ opacity:1; }
+
+  /* ---------------------------- Jaillissement d'items (coffre ouvert) ---------------------------- */
+  /* Rayons de lumiere + items qui montent depuis le coffre, façon "chest opening"
+     Vampire Survivors - remplace l'ancienne machine a sous encadree. */
+  .burst-wrap{
+    position:absolute; inset:0;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.3s ease;
+  }
+  .burst-wrap.visible{ opacity:1; }
+
+  .ray{
+    position:absolute; left:50%; bottom:18%;
+    width:160px; height:62vh;
+    transform-origin:50% 100%;
+    clip-path: polygon(46% 100%, 54% 100%, 100% 0%, 0% 0%);
+    filter:blur(1px);
+    animation: ray-pulse 1.4s ease-in-out infinite;
+  }
+  .ray-0{ transform: translateX(-50%) rotate(-26deg); background:linear-gradient(0deg, rgba(255,130,60,0.55), rgba(255,130,60,0)); }
+  .ray-1{ transform: translateX(-50%) rotate(0deg); background:linear-gradient(0deg, rgba(255,80,80,0.6), rgba(255,80,80,0)); animation-delay:0.2s; }
+  .ray-2{ transform: translateX(-50%) rotate(26deg); background:linear-gradient(0deg, rgba(255,130,60,0.55), rgba(255,130,60,0)); animation-delay:0.4s; }
+  @keyframes ray-pulse{
+    0%, 100%{ opacity:0.35; }
+    50%{ opacity:0.65; }
+  }
+
+  .floating-icon{
+    position:absolute; left:50%; bottom:18%;
+    width:28px; height:28px;
+    transform:translate(-50%, 0);
+    animation: float-up 1.4s ease-out forwards;
+  }
+  @keyframes float-up{
+    0%{ transform:translate(-50%, 0) scale(0.8); opacity:0; }
+    15%{ opacity:1; }
+    100%{ transform:translate(calc(-50% + var(--drift, 0px)), -60vh) scale(1); opacity:0; }
+  }
+
+  .result-icon{
+    position:absolute; left:50%; bottom:18%;
+    width:64px; height:64px;
+    transform:translate(-50%, 0);
+    opacity:0;
+  }
+  .result-icon.rising{
+    animation: result-rise 1.1s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes result-rise{
+    0%{ transform:translate(-50%, 0) scale(0.6); opacity:0; filter:drop-shadow(0 0 0 rgba(242,193,78,0)); }
+    20%{ opacity:1; }
+    100%{ transform:translate(-50%, -180px) scale(1.4); opacity:1; filter:drop-shadow(0 0 18px rgba(242,193,78,0.9)); }
+  }
+
+  /* ---------------------------- Carte de recompense (fallback sans video) ---------------------------- */
+  .reward-card{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0;
+    transition:opacity 0.4s ease;
+    pointer-events:none;
+  }
+  .reward-card.visible{ opacity:1; }
+  .reward-card-inner{
+    text-align:center;
+    background:#111111;
+    border:2px solid var(--accent);
+    border-radius:16px;
+    padding:28px 40px;
+    box-shadow:0 0 30px rgba(242,193,78,0.35);
+  }
+  .reward-card-icon{ width:56px; height:56px; margin-bottom:8px; }
+  .reward-card-tier{
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--accent);
+    font-weight:700;
+    font-size:14px;
+    margin-bottom:4px;
+  }
+  .reward-card-login{ font-size:20px; font-weight:600; }
+
+  .reward-video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:contain;
+    opacity:0;
+    transition:opacity 0.4s ease;
+  }
+  .reward-video.visible{ opacity:1; }
+
+  /* ---------------------------- Panneau de test (?debug=1 uniquement) ---------------------------- */
+  .debug-panel{
+    display:none;
+    position:fixed; left:12px; top:12px;
+    z-index:10;
+    background:rgba(17,17,17,0.9);
+    border:1px solid rgba(255,255,255,0.25);
+    border-radius:10px;
+    padding:10px;
+    gap:6px;
+    pointer-events:auto;
+  }
+  .debug-panel.visible{ display:flex; }
+  .debug-panel button{
+    font-family:inherit;
+    font-size:12px;
+    font-weight:600;
+    color:#000;
+    background:var(--accent);
+    border:none;
+    border-radius:6px;
+    padding:6px 10px;
+    cursor:pointer;
+  }
+  .debug-panel button:hover{ filter:brightness(0.9); }
+</style>
+</head>
+<body>
+
+<div class="debug-panel" id="debug-panel">
+  <button data-test="follow">Test follow</button>
+  <button data-test="sub:1000">Test sub T1</button>
+  <button data-test="sub:2000">Test sub T2</button>
+  <button data-test="sub:3000">Test sub T3</button>
+</div>
+
+<div class="stage">
+  <div class="chest-wrap" id="chest-wrap">
+    <div class="impact-flash" id="impact-flash"></div>
+    <div class="burst"></div>
+    <img class="chest-sprite chest-sprite-closed" id="chest-sprite-closed" alt="">
+    <img class="chest-sprite chest-sprite-open" id="chest-sprite-open" alt="">
+  </div>
+
+  <img class="firework" id="firework" alt="">
+
+  <div class="burst-wrap" id="burst-wrap">
+    <div class="ray ray-0"></div>
+    <div class="ray ray-1"></div>
+    <div class="ray ray-2"></div>
+    <img class="result-icon" id="result-icon" alt="">
+  </div>
+
+  <div class="reward-card" id="reward-card">
+    <div class="reward-card-inner">
+      <img class="reward-card-icon" id="reward-card-icon" alt="">
+      <div class="reward-card-tier" id="reward-card-tier">Epique</div>
+      <div class="reward-card-login" id="reward-card-login">pseudo</div>
+    </div>
+  </div>
+
+  <video class="reward-video" id="reward-video" muted playsinline></video>
+</div>
+
+<script src="assets/chest-manifest.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+
+  /* ====================== CONFIG A REMPLIR ====================== */
+  const CONFIG = {
+    SUPABASE_URL: 'https://nvqddjwfzuusvmfwilyh.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_z9m2o_qjOP5Evrn_sR8uOw_vgeSIywz',
+    // Sons optionnels : si absents/404, le flux visuel continue avec des
+    // delais de secours (voir playTrack). A deposer dans assets/chest/audio/.
+    AUDIO: {
+      waiting: 'assets/chest/audio/waiting.mp3',
+      opening: 'assets/chest/audio/opening.mp3',
+      ongoing: {
+        commun: 'assets/chest/audio/ongoing-commun.mp3',
+        rare: 'assets/chest/audio/ongoing-rare.mp3',
+        epique: 'assets/chest/audio/ongoing-epique.mp3',
+      },
+      ending: {
+        commun: 'assets/chest/audio/ending-commun.mp3',
+        rare: 'assets/chest/audio/ending-rare.mp3',
+        epique: 'assets/chest/audio/ending-epique.mp3',
+      },
+    },
+  };
+  /* ================================================================ */
+
+  const manifest = window.CHEST_MANIFEST;
+  const sb = (CONFIG.SUPABASE_URL !== 'REMPLACE_MOI')
+    ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+    : null;
+
+  const chestWrap = document.getElementById('chest-wrap');
+  const chestSpriteClosed = document.getElementById('chest-sprite-closed');
+  const chestSpriteOpen = document.getElementById('chest-sprite-open');
+  const impactFlash = document.getElementById('impact-flash');
+  const firework = document.getElementById('firework');
+  const burstWrap = document.getElementById('burst-wrap');
+  const resultIcon = document.getElementById('result-icon');
+  const rewardCard = document.getElementById('reward-card');
+  const rewardCardIcon = document.getElementById('reward-card-icon');
+  const rewardCardTier = document.getElementById('reward-card-tier');
+  const rewardCardLogin = document.getElementById('reward-card-login');
+  const rewardVideo = document.getElementById('reward-video');
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function normalizeReward(rt){
+    return manifest.rewardOrder.includes(rt) ? rt : 'commun';
+  }
+
+  // Joue une piste et fournit une promesse qui se resout quand elle se
+  // termine - sert d'horloge maitresse pour caler la duree visuelle des
+  // phases sur la vraie duree de la musique. `fallbackMs` couvre le cas ou
+  // le fichier est absent/404 ou que l'autoplay est bloque : le show
+  // continue quand meme au bout de ce delai plutot que de rester bloque.
+  function playTrack(src, { loop = false, fallbackMs = 6000 } = {}){
+    const audio = new Audio(src);
+    audio.loop = loop;
+    const done = loop ? null : new Promise((resolve) => {
+      let settled = false;
+      const finish = () => { if(!settled){ settled = true; resolve(); } };
+      audio.addEventListener('ended', finish, { once: true });
+      audio.addEventListener('error', finish, { once: true });
+      setTimeout(finish, fallbackMs);
+    });
+    audio.play().catch(() => {});
+    return { audio, done };
+  }
+
+  // ---------------------------- File d'attente (coffre visible avant ouverture) ----------------------------
+
+  // Evenements 'pending' connus (deja crees par twitch-eventsub, pas encore
+  // declenches par le streamer). Le premier de la liste est celui affiche a
+  // l'ecran - c'est aussi toujours celui que open-chest declenchera en
+  // premier (meme tri "plus ancien d'abord" cote serveur).
+  let pendingList = [];
+  let waitingAudio = null;
+  let animating = false;
+
+  function showWaitingChest(ev){
+    const reward = normalizeReward(ev.reward_type);
+    chestSpriteClosed.src = manifest.chestImage(reward, 'closed');
+    chestSpriteOpen.src = manifest.chestImage(reward, 'open');
+    chestWrap.classList.remove('bursting');
+    chestWrap.classList.add('visible', 'idle-bob');
+    if(!waitingAudio){
+      waitingAudio = playTrack(CONFIG.AUDIO.waiting, { loop: true }).audio;
+    }
+  }
+
+  function hideChest(){
+    chestWrap.classList.remove('visible', 'idle-bob', 'bursting');
+    stopWaitingAudio();
+  }
+
+  function stopWaitingAudio(){
+    if(waitingAudio){ waitingAudio.pause(); waitingAudio = null; }
+  }
+
+  // Rafraichit l'affichage "en attente" d'apres pendingList - jamais pendant
+  // qu'une ouverture est deja en cours (l'animation gere elle-meme sa suite).
+  function refreshWaitingDisplay(){
+    if(animating) return;
+    if(pendingList.length > 0) showWaitingChest(pendingList[0]);
+    else hideChest();
+  }
+
+  const queue = [];
+  let processing = false;
+
+  function enqueueEvent(ev){
+    queue.push(ev);
+    processQueue();
+  }
+
+  async function processQueue(){
+    if(processing) return;
+    processing = true;
+    animating = true;
+    while(queue.length > 0){
+      const ev = queue.shift();
+      pendingList = pendingList.filter((p) => p.id !== ev.id);
+      try{
+        await playChestSequence(ev);
+      }catch(err){
+        console.error('[chest-overlay] erreur pendant l\'animation:', err);
+      }
+    }
+    animating = false;
+    processing = false;
+    refreshWaitingDisplay(); // enchaine sur le prochain coffre en attente, s'il y en a un
+  }
+
+  async function playChestSequence(ev){
+    const reward = normalizeReward(ev.reward_type);
+
+    // Le coffre est normalement deja visible depuis l'etat d'attente ; on
+    // s'assure juste que le bon sprite est en place (utile si l'overlay a
+    // rechargé sans etre passe par cet etat, ex. mode ?simulate=/?debug=1).
+    chestSpriteClosed.src = manifest.chestImage(reward, 'closed');
+    chestSpriteOpen.src = manifest.chestImage(reward, 'open');
+    chestWrap.classList.remove('bursting', 'idle-bob');
+    chestWrap.classList.add('visible');
+    stopWaitingAudio();
+
+    await playOpening();
+    await playOngoing(reward);
+    await playEnding(ev, reward);
+
+    chestWrap.classList.remove('visible', 'bursting');
+  }
+
+  // --- Phase 1 : montee en tension + explosion, calee sur opening.mp3 ---
+  async function playOpening(){
+    const { done } = playTrack(CONFIG.AUDIO.opening, { fallbackMs: 6500 });
+
+    chestWrap.classList.add('shaking');
+    await sleep(900);
+    chestWrap.classList.remove('shaking');
+
+    // Pas de sprite de fissure dans le pack (juste ferme/ouvert) : la tension
+    // se joue en a-coups + flashs qui s'enchainent jusqu'a la fin du morceau.
+    let trackEnded = false;
+    done.then(() => { trackEnded = true; });
+    while(!trackEnded){
+      chestWrap.classList.remove('pulse');
+      impactFlash.classList.remove('flash');
+      void chestWrap.offsetWidth; // relance les animations CSS
+      chestWrap.classList.add('pulse');
+      impactFlash.classList.add('flash');
+      await sleep(450);
+    }
+
+    chestWrap.classList.add('bursting'); // crossfade sprite ferme -> ouvert
+    await sleep(500);
+  }
+
+  // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
+  async function playOngoing(reward){
+    burstWrap.classList.add('visible');
+    const { done } = playTrack(CONFIG.AUDIO.ongoing[reward], { fallbackMs: 4000 });
+    const spawnTimer = setInterval(spawnFloatingIcon, 140);
+    await done;
+    clearInterval(spawnTimer);
+  }
+
+  // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
+  async function playEnding(ev, reward){
+    const { audio, done } = playTrack(CONFIG.AUDIO.ending[reward], { fallbackMs: 3500 });
+
+    playFirework();
+    resultIcon.classList.remove('rising');
+    void resultIcon.offsetWidth; // relance l'animation CSS
+    resultIcon.src = manifest.rewardIcon[reward];
+    resultIcon.classList.add('rising');
+
+    const videoPath = manifest.randomVideoPath(reward);
+    if(videoPath){
+      audio.pause(); // la cinematique a son propre son
+      await tryPlayRewardVideo(videoPath);
+    }else{
+      rewardCardIcon.src = manifest.rewardIcon[reward];
+      rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
+      rewardCardLogin.textContent = ev.twitch_login;
+      rewardCard.classList.add('visible');
+      await done;
+      rewardCard.classList.remove('visible');
+    }
+
+    burstWrap.classList.remove('visible');
+    await sleep(300);
+  }
+
+  function spawnFloatingIcon(){
+    const el = document.createElement('img');
+    el.className = 'floating-icon';
+    const pool = manifest.decorativeIcons;
+    el.src = pool[Math.floor(Math.random() * pool.length)];
+    el.style.setProperty('--drift', (Math.random() * 160 - 80) + 'px');
+    el.style.left = (50 + (Math.random() * 20 - 10)) + '%';
+    burstWrap.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+
+  // Flipbook 8 frames joue une fois en fond au moment de la revelation.
+  function playFirework(){
+    const frames = manifest.fireworkFrames;
+    firework.classList.add('playing');
+    let i = 0;
+    const timer = setInterval(() => {
+      firework.src = frames[i];
+      i++;
+      if(i >= frames.length){
+        clearInterval(timer);
+        firework.classList.remove('playing');
+      }
+    }, 70);
+  }
+
+  function tryPlayRewardVideo(src){
+    return new Promise((resolve) => {
+      rewardVideo.src = src;
+      const onEnded = () => cleanup(true);
+      const onError = () => cleanup(false);
+      function cleanup(ok){
+        rewardVideo.classList.remove('visible');
+        rewardVideo.removeEventListener('ended', onEnded);
+        rewardVideo.removeEventListener('error', onError);
+        rewardVideo.removeAttribute('src');
+        resolve(ok);
+      }
+      rewardVideo.addEventListener('ended', onEnded);
+      rewardVideo.addEventListener('error', onError);
+      rewardVideo.play().then(() => {
+        rewardVideo.classList.add('visible');
+      }).catch(() => cleanup(false));
+    });
+  }
+
+  // ---------------------------- Entree des evenements ----------------------------
+
+  // Resultat pre-determine par le serveur (Edge Function twitch-eventsub) :
+  // ce mapping n'existe ici QUE pour les tests locaux (?simulate= et panneau
+  // ?debug=1), jamais pour un vrai evenement (toujours ev.reward_type venant
+  // de Supabase).
+  const TEST_REWARD_BY_TIER = { '1000': 'rare', '2000': 'epique', '3000': 'epique' };
+
+  function buildTestEvent(kind){
+    if(kind === 'follow'){
+      return { twitch_login: 'ViewerTest', event_type: 'follow', tier: null, reward_type: 'commun' };
+    }
+    const match = /^sub:(\d{4})$/.exec(kind || '');
+    if(match){
+      const tier = match[1];
+      return { twitch_login: 'ViewerTest', event_type: 'subscribe', tier, reward_type: TEST_REWARD_BY_TIER[tier] || 'rare' };
+    }
+    return null;
+  }
+
+  async function loadInitialPending(){
+    if(!sb) return;
+    const { data, error } = await sb
+      .from('chest_events')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if(error){ console.error('[chest-overlay] chargement de la file:', error); return; }
+    pendingList = data || [];
+    refreshWaitingDisplay();
+  }
+
+  function subscribeRealtime(){
+    if(!sb) return;
+    sb.channel('chest_events_overlay')
+      // Nouvel evenement follow/sub : le coffre apparait et attend que le
+      // streamer l'ouvre depuis chest-control.html.
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chest_events' }, (payload) => {
+        pendingList.push(payload.new);
+        refreshWaitingDisplay();
+      })
+      // Le streamer a clique "Ouvrir le coffre" : on lance l'animation.
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chest_events', filter: 'status=eq.triggered' }, (payload) => {
+        pendingList = pendingList.filter((p) => p.id !== payload.new.id);
+        enqueueEvent(payload.new);
+      })
+      .subscribe();
+  }
+
+  // Panneau visible uniquement sur chest-overlay.html?debug=1 (jamais dans
+  // OBS en usage normal) : boutons pour rejouer l'animation sans backend, a
+  // volonte, pendant qu'on regle les timings/assets.
+  function initDebugPanel(){
+    const panel = document.getElementById('debug-panel');
+    panel.classList.add('visible');
+    panel.querySelectorAll('button[data-test]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const testEvent = buildTestEvent(btn.dataset.test);
+        if(testEvent) enqueueEvent(testEvent);
+      });
+    });
+  }
+
+  async function init(){
+    const params = new URLSearchParams(location.search);
+
+    if(params.get('debug') === '1'){
+      initDebugPanel();
+    }
+
+    const simulated = buildTestEvent(params.get('simulate'));
+    if(simulated){
+      enqueueEvent(simulated);
+      return; // mode test : pas de connexion Supabase necessaire.
+    }
+
+    await loadInitialPending(); // coffres deja en attente (ex. reload OBS en cours de stream)
+    subscribeRealtime();
+  }
+
+  init();
+
+})();
+</script>
+
+</body>
+</html>
