@@ -42,6 +42,36 @@ qui ne necessite aucun secret cote client (adapte a un site 100% statique).
    - **Project URL** (ressemble a `https://xxxxx.supabase.co`)
    - **anon public key** (une longue chaine de caracteres)
 
+## 2bis. Deployer la Edge Function save-avatar (securite)
+
+La sauvegarde d'un avatar ne s'ecrit plus directement depuis le navigateur :
+elle passe par une Edge Function Supabase (`supabase/functions/save-avatar`)
+qui revalide le token Twitch du viewer cote serveur avant d'ecrire. Sans
+cette etape, le bouton "Enregistrer mon avatar" echouera.
+
+1. Installe le [Supabase CLI](https://supabase.com/docs/guides/cli) si ce
+   n'est pas deja fait.
+2. Connecte-toi et lie le CLI a ton projet :
+   ```
+   supabase login
+   supabase link --project-ref xxxxx
+   ```
+   (`xxxxx` = l'identifiant de projet visible dans l'URL du dashboard
+   Supabase, juste avant `.supabase.co`)
+3. Renseigne le secret `TWITCH_CLIENT_ID` (le meme Client ID que celui cree
+   a l'etape 1) :
+   ```
+   supabase secrets set TWITCH_CLIENT_ID=colle_ton_client_id_ici
+   ```
+4. Deploie la fonction :
+   ```
+   supabase functions deploy save-avatar
+   ```
+5. Si ton projet Supabase existait deja avant cette version, execute aussi
+   la migration de securite documentee en bas de
+   [`supabase/schema.sql`](supabase/schema.sql) (retire les anciennes
+   policies d'ecriture ouvertes).
+
 ## 3. Remplir la configuration
 
 Deux fichiers ont chacun un bloc `CONFIG` a completer avec les valeurs
@@ -120,15 +150,13 @@ seulement celles utilisant une mandibule) :
 alter table avatar_customizations add column if not exists mandible smallint;
 ```
 
-## Limite de securite importante (a lire)
+## Securite de l'ecriture
 
-Dans cette version, l'ecriture dans Supabase depuis `avatar-editor.html` se
-fait directement avec la cle publique ("anon key"), sans verification
-serveur du token Twitch. Ca veut dire qu'un utilisateur un peu bidouilleur
-pourrait techniquement, via les outils de developpement de son navigateur,
-ecrire ou ecraser l'avatar de quelqu'un d'autre. Pour un usage normal (les
-viewers utilisent simplement la page prevue pour ca), ce n'est pas un
-probleme. Si tu veux fermer cette faille correctement, il faut ajouter une
-Supabase Edge Function qui verifie le token aupres de l'API Twitch avant
-d'ecrire - une evolution possible mais hors scope de cette premiere version.
-Le detail est aussi commente directement dans `supabase/schema.sql`.
+L'ecriture dans Supabase passe par la Edge Function `save-avatar` (voir
+section 2bis), qui verifie aupres de l'API Twitch que le `access_token`
+fourni appartient bien a l'utilisateur au nom duquel on ecrit, avant
+d'ecrire avec la cle `service_role` (jamais exposee au client). Aucune
+policy Supabase publique ne permet plus d'insert/update direct sur
+`avatar_customizations` - impossible pour un viewer d'ecraser l'avatar de
+quelqu'un d'autre depuis les devtools. Le detail est aussi commente
+directement dans `supabase/schema.sql`.

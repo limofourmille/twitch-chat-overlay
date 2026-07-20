@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle des alertes coffre</title>
+<style>
+  :root{
+    --bg: #000000;
+    --fg: #c9c9c9;
+    --panel: #111111;
+    --border: rgba(255,255,255,0.25);
+    --muted: #999999;
+    --ok: #8fd18f;
+    --err: #e08080;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:'Segoe UI', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:520px;
+    margin:0 auto;
+    padding:32px 20px 64px;
+  }
+  h1{ font-size:22px; margin:0 0 4px; }
+  p.sub{ color:var(--muted); margin:0 0 24px; font-size:14px; }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  button{
+    font-family:inherit;
+    font-size:14px;
+    font-weight:600;
+    color:#000;
+    background:var(--fg);
+    border:none;
+    border-radius:8px;
+    padding:10px 18px;
+    cursor:pointer;
+  }
+  button:hover{ filter:brightness(0.85); }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+  button.ghost{
+    background:transparent;
+    color:var(--fg);
+    border:1px solid var(--border);
+  }
+  button.big{
+    display:block;
+    width:100%;
+    font-size:18px;
+    padding:18px;
+    margin:16px 0;
+  }
+
+  #app-view{ display:none; }
+  .user-badge{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:16px;
+    font-size:14px;
+    color:var(--muted);
+  }
+  .user-badge strong{ color:var(--fg); }
+
+  .denied{ color:var(--err); font-size:14px; }
+
+  .queue-count{
+    font-size:14px;
+    color:var(--muted);
+    margin-bottom:8px;
+  }
+  .queue-count strong{ color:var(--fg); font-size:18px; }
+
+  .queue-list{ list-style:none; margin:0; padding:0; }
+  .queue-list li{
+    display:flex; justify-content:space-between; gap:10px;
+    padding:8px 0;
+    border-bottom:1px solid var(--border);
+    font-size:13px;
+  }
+  .queue-list li:last-child{ border-bottom:none; }
+  .queue-list .login{ color:var(--fg); font-weight:600; }
+  .queue-list .reward{ color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-size:11px; }
+  .empty{ color:var(--muted); font-size:13px; font-style:italic; }
+
+  #trigger-status{ margin-top:8px; font-size:13px; min-height:18px; }
+  #trigger-status.ok{ color:var(--ok); }
+  #trigger-status.err{ color:var(--err); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Controle des alertes coffre</h1>
+  <p class="sub">Page privee : a ouvrir dans un onglet a cote d'OBS, jamais comme source navigateur.</p>
+
+  <div id="login-view" class="card">
+    <p>Connecte-toi avec ton compte Twitch streamer pour controler les alertes.</p>
+    <button id="login-btn">Se connecter avec Twitch</button>
+  </div>
+
+  <div id="denied-view" class="card" style="display:none;">
+    <p class="denied">Ce compte Twitch (<strong id="denied-login"></strong>) n'est pas autorise a controler les alertes.</p>
+    <button class="ghost" id="denied-logout-btn">Se deconnecter</button>
+  </div>
+
+  <div id="app-view" class="card">
+    <div class="user-badge">
+      Connecte en tant que <strong id="user-login">-</strong>
+      <button class="ghost" id="logout-btn">Se deconnecter</button>
+    </div>
+
+    <div class="queue-count">File d'attente : <strong id="queue-count">0</strong></div>
+    <ul class="queue-list" id="queue-list"></ul>
+
+    <button class="big" id="open-btn" disabled>Ouvrir le coffre</button>
+    <div id="trigger-status"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+
+  /* ====================== CONFIG A REMPLIR ====================== */
+  const CONFIG = {
+    // App Twitch dediee "CHEST_SETUP" - distincte de celle de l'avatar.
+    TWITCH_CLIENT_ID: 'kafe8tvhkifli9t9awn8zwsokxdb75',
+    REDIRECT_URI: location.origin + location.pathname,
+    SUPABASE_URL: 'https://nvqddjwfzuusvmfwilyh.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_z9m2o_qjOP5Evrn_sR8uOw_vgeSIywz',
+    // Ton ID Twitch NUMERIQUE (pas ton pseudo) - meme valeur que
+    // BROADCASTER_TWITCH_USER_ID cote Edge Functions. Sert uniquement a
+    // l'affichage/UX ici : le vrai controle d'acces est fait par la
+    // fonction open-chest, cote serveur.
+    BROADCASTER_TWITCH_USER_ID: '1478240165',
+  };
+  /* ================================================================ */
+
+  const sb = (CONFIG.SUPABASE_URL !== 'REMPLACE_MOI')
+    ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+    : null;
+
+  const loginView = document.getElementById('login-view');
+  const deniedView = document.getElementById('denied-view');
+  const deniedLoginEl = document.getElementById('denied-login');
+  const appView = document.getElementById('app-view');
+  const userLoginEl = document.getElementById('user-login');
+  const queueCountEl = document.getElementById('queue-count');
+  const queueListEl = document.getElementById('queue-list');
+  const openBtn = document.getElementById('open-btn');
+  const triggerStatus = document.getElementById('trigger-status');
+
+  let twitchUser = null; // { id, login }
+  let accessToken = null;
+  let pendingEvents = [];
+
+  function twitchAuthUrl(){
+    const params = new URLSearchParams({
+      client_id: CONFIG.TWITCH_CLIENT_ID,
+      redirect_uri: CONFIG.REDIRECT_URI,
+      response_type: 'token',
+      scope: '',
+    });
+    return `https://id.twitch.tv/oauth2/authorize?${params.toString()}`;
+  }
+
+  function extractTokenFromHash(){
+    if(!location.hash) return null;
+    const params = new URLSearchParams(location.hash.slice(1));
+    return params.get('access_token');
+  }
+
+  async function fetchTwitchUser(token){
+    const res = await fetch('https://api.twitch.tv/helix/users', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Client-Id': CONFIG.TWITCH_CLIENT_ID,
+      },
+    });
+    if(!res.ok) throw new Error('Twitch /users a echoue : ' + res.status);
+    const body = await res.json();
+    const u = body.data[0];
+    return { id: u.id, login: u.login };
+  }
+
+  function renderQueue(){
+    queueCountEl.textContent = String(pendingEvents.length);
+    openBtn.disabled = pendingEvents.length === 0;
+
+    queueListEl.innerHTML = '';
+    if(pendingEvents.length === 0){
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'Aucun evenement en attente.';
+      queueListEl.appendChild(li);
+      return;
+    }
+    pendingEvents.forEach(ev => {
+      const li = document.createElement('li');
+      const login = document.createElement('span');
+      login.className = 'login';
+      login.textContent = ev.twitch_login + (ev.event_type === 'subscribe' ? ` (sub T${(ev.tier||'').slice(0,1)})` : ' (follow)');
+      const reward = document.createElement('span');
+      reward.className = 'reward';
+      reward.textContent = ev.reward_type;
+      li.appendChild(login);
+      li.appendChild(reward);
+      queueListEl.appendChild(li);
+    });
+  }
+
+  async function loadPendingEvents(){
+    if(!sb) return;
+    const { data, error } = await sb
+      .from('chest_events')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if(error){ console.error('[chest-control] chargement file:', error); return; }
+    pendingEvents = data || [];
+    renderQueue();
+  }
+
+  function subscribeRealtime(){
+    if(!sb) return;
+    sb.channel('chest_events_control')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chest_events' }, () => {
+        loadPendingEvents();
+      })
+      .subscribe();
+  }
+
+  async function openChest(){
+    if(!accessToken) return;
+    openBtn.disabled = true;
+    triggerStatus.textContent = 'Ouverture...';
+    triggerStatus.className = '';
+
+    const { data, error } = await sb.functions.invoke('open-chest', {
+      body: { access_token: accessToken },
+    });
+
+    if(error || data?.error){
+      console.error('[chest-control] open-chest:', error || data.error);
+      triggerStatus.textContent = 'Erreur : ' + (data?.error || 'declenchement impossible.');
+      triggerStatus.className = 'err';
+      openBtn.disabled = pendingEvents.length === 0;
+      return;
+    }
+    if(!data.event){
+      triggerStatus.textContent = 'File vide.';
+      triggerStatus.className = '';
+    } else {
+      triggerStatus.textContent = `Coffre ouvert pour ${data.event.twitch_login} (${data.event.reward_type}).`;
+      triggerStatus.className = 'ok';
+    }
+    await loadPendingEvents();
+  }
+
+  async function showLoggedIn(){
+    loginView.style.display = 'none';
+
+    if(CONFIG.BROADCASTER_TWITCH_USER_ID !== 'REMPLACE_MOI' && twitchUser.id !== CONFIG.BROADCASTER_TWITCH_USER_ID){
+      deniedView.style.display = 'block';
+      deniedLoginEl.textContent = twitchUser.login;
+      appView.style.display = 'none';
+      return;
+    }
+
+    deniedView.style.display = 'none';
+    appView.style.display = 'block';
+    userLoginEl.textContent = twitchUser.login;
+    await loadPendingEvents();
+    subscribeRealtime();
+  }
+
+  function logout(){
+    sessionStorage.removeItem('twitch_access_token');
+    twitchUser = null;
+    accessToken = null;
+    loginView.style.display = 'block';
+    deniedView.style.display = 'none';
+    appView.style.display = 'none';
+  }
+
+  document.getElementById('login-btn').addEventListener('click', () => {
+    if(CONFIG.TWITCH_CLIENT_ID === 'REMPLACE_MOI'){
+      alert("CONFIG.TWITCH_CLIENT_ID n'est pas renseigne dans chest-control.html.");
+      return;
+    }
+    location.href = twitchAuthUrl();
+  });
+  document.getElementById('logout-btn').addEventListener('click', logout);
+  document.getElementById('denied-logout-btn').addEventListener('click', logout);
+  openBtn.addEventListener('click', openChest);
+
+  async function init(){
+    let token = extractTokenFromHash();
+    if(token){
+      sessionStorage.setItem('twitch_access_token', token);
+      history.replaceState(null, '', location.pathname);
+    } else {
+      token = sessionStorage.getItem('twitch_access_token');
+    }
+    if(!token) return;
+
+    try{
+      accessToken = token;
+      twitchUser = await fetchTwitchUser(token);
+      await showLoggedIn();
+    }catch(err){
+      console.error('[chest-control] auth Twitch:', err);
+      sessionStorage.removeItem('twitch_access_token');
+    }
+  }
+
+  init();
+
+})();
+</script>
+
+</body>
+</html>

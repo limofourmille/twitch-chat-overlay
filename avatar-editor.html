@@ -288,16 +288,20 @@
       saveStatus.className = 'err';
       return;
     }
-    const { error } = await sb.from('avatar_customizations').upsert({
-      twitch_user_id: twitchUser.id,
-      twitch_login: twitchUser.login,
-      base: config.base, eyes: config.eyes,
-      hat: config.hat, antenna: config.antenna, object: config.object,
-      mandible: config.mandible,
-      updated_at: new Date().toISOString(),
+    // La sauvegarde passe par la Edge Function save-avatar, qui revalide le
+    // token Twitch cote serveur avant d'ecrire (voir supabase/functions/save-avatar) :
+    // impossible d'ecraser l'avatar de quelqu'un d'autre depuis les devtools.
+    const accessToken = sessionStorage.getItem('twitch_access_token');
+    const { data, error } = await sb.functions.invoke('save-avatar', {
+      body: {
+        access_token: accessToken,
+        base: config.base, eyes: config.eyes,
+        hat: config.hat, antenna: config.antenna, object: config.object,
+        mandible: config.mandible,
+      },
     });
-    if(error){
-      console.error('[avatar-editor] sauvegarde:', error);
+    if(error || data?.error){
+      console.error('[avatar-editor] sauvegarde:', error || data.error);
       saveStatus.textContent = 'Erreur lors de la sauvegarde.';
       saveStatus.className = 'err';
       return;
