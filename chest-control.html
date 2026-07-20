@@ -95,6 +95,14 @@
   #trigger-status{ margin-top:8px; font-size:13px; min-height:18px; }
   #trigger-status.ok{ color:var(--ok); }
   #trigger-status.err{ color:var(--err); }
+
+  .test-card{ border-color:#5a4a1a; }
+  .test-card h2{ font-size:14px; margin:0 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .test-buttons{ display:flex; flex-wrap:wrap; gap:8px; }
+  .test-buttons button{ background:#5a4a1a; color:#f2d98a; }
+  #test-status{ margin-top:8px; font-size:13px; min-height:18px; }
+  #test-status.ok{ color:var(--ok); }
+  #test-status.err{ color:var(--err); }
 </style>
 </head>
 <body>
@@ -124,6 +132,17 @@
 
     <button class="big" id="open-btn" disabled>Ouvrir le coffre</button>
     <div id="trigger-status"></div>
+  </div>
+
+  <div id="test-view" class="card test-card" style="display:none;">
+    <h2>Zone de test</h2>
+    <div class="test-buttons">
+      <button data-test="follow">+ Follow</button>
+      <button data-test="sub:1000">+ Sub T1</button>
+      <button data-test="sub:2000">+ Sub T2</button>
+      <button data-test="sub:3000">+ Sub T3</button>
+    </div>
+    <div id="test-status"></div>
   </div>
 </div>
 
@@ -159,6 +178,8 @@
   const queueListEl = document.getElementById('queue-list');
   const openBtn = document.getElementById('open-btn');
   const triggerStatus = document.getElementById('trigger-status');
+  const testView = document.getElementById('test-view');
+  const testStatus = document.getElementById('test-status');
 
   let twitchUser = null; // { id, login }
   let accessToken = null;
@@ -267,6 +288,31 @@
     await loadPendingEvents();
   }
 
+  // Cree un faux evenement 'pending' (voir supabase/functions/create-test-event)
+  // pour tester le flux complet sans attendre un vrai follow/sub.
+  async function createTestEvent(kind){
+    if(!accessToken) return;
+    testStatus.textContent = 'Creation...';
+    testStatus.className = '';
+
+    const match = /^sub:(\d{4})$/.exec(kind);
+    const body = match
+      ? { access_token: accessToken, event_type: 'subscribe', tier: match[1] }
+      : { access_token: accessToken, event_type: 'follow', tier: null };
+
+    const { data, error } = await sb.functions.invoke('create-test-event', { body });
+
+    if(error || data?.error){
+      console.error('[chest-control] create-test-event:', error || data.error);
+      testStatus.textContent = 'Erreur : ' + (data?.error || 'creation impossible.');
+      testStatus.className = 'err';
+      return;
+    }
+    testStatus.textContent = `Evenement test ajoute (${data.event.reward_type}).`;
+    testStatus.className = 'ok';
+    await loadPendingEvents();
+  }
+
   async function showLoggedIn(){
     loginView.style.display = 'none';
 
@@ -274,11 +320,13 @@
       deniedView.style.display = 'block';
       deniedLoginEl.textContent = twitchUser.login;
       appView.style.display = 'none';
+      testView.style.display = 'none';
       return;
     }
 
     deniedView.style.display = 'none';
     appView.style.display = 'block';
+    testView.style.display = 'block';
     userLoginEl.textContent = twitchUser.login;
     await loadPendingEvents();
     subscribeRealtime();
@@ -291,6 +339,7 @@
     loginView.style.display = 'block';
     deniedView.style.display = 'none';
     appView.style.display = 'none';
+    testView.style.display = 'none';
   }
 
   document.getElementById('login-btn').addEventListener('click', () => {
@@ -303,6 +352,9 @@
   document.getElementById('logout-btn').addEventListener('click', logout);
   document.getElementById('denied-logout-btn').addEventListener('click', logout);
   openBtn.addEventListener('click', openChest);
+  testView.querySelectorAll('button[data-test]').forEach((btn) => {
+    btn.addEventListener('click', () => createTestEvent(btn.dataset.test));
+  });
 
   async function init(){
     let token = extractTokenFromHash();
