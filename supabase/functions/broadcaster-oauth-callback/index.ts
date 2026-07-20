@@ -112,6 +112,21 @@ Deno.serve(async (req) => {
   const state = url.searchParams.get('state');
   const cookies = parseCookies(req.headers.get('cookie') ?? '');
 
+  // Twitch redirige parfois directement ici avec ?error=... (ex. redirect_uri
+  // non enregistre - typiquement chest-control.html ouvert en local plutot
+  // que sur son URL hebergee) plutot que sur la page qui a initie le flow.
+  // C'est un cas distinct d'un state expire, donc un message different.
+  const oauthError = url.searchParams.get('error');
+  if (oauthError) {
+    return text(
+      `Erreur renvoyee par Twitch : ${oauthError} - ${url.searchParams.get('error_description') ?? ''}\n\n` +
+        `Si c'est "redirect_mismatch", verifie que la page qui a lance la connexion Twitch ` +
+        `(chest-control.html) est bien ouverte depuis son URL hebergee exacte enregistree ` +
+        `dans dev.twitch.tv/console/apps, pas depuis un fichier local (file:///...).`,
+      400,
+    );
+  }
+
   if (!code || !state || state !== cookies['oauth_state']) {
     return text('Etat OAuth invalide ou expire. Relance le flow depuis broadcaster-authorize.', 400);
   }
