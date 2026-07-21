@@ -324,19 +324,37 @@
 
   // Joue une piste et fournit une promesse qui se resout quand elle se
   // termine - sert d'horloge maitresse pour caler la duree visuelle des
-  // phases sur la vraie duree de la musique. `fallbackMs` couvre le cas ou
-  // le fichier est absent/404 ou que l'autoplay est bloque : le show
-  // continue quand meme au bout de ce delai plutot que de rester bloque.
-  function playTrack(src, { loop = false, fallbackMs = 6000 } = {}){
+  // phases sur la vraie duree de la musique.
+  //
+  // `fallbackMs` n'est qu'un filet de securite initial (fichier absent/404,
+  // autoplay bloque) : des que les metadonnees du fichier sont chargees, le
+  // delai de secours est recalcule sur la VRAIE duree (+ marge) plutot que
+  // de garder une valeur devinee a la main - sinon un fallback trop court
+  // coupe la piste avant la fin reelle et desynchronise toute la suite
+  // (constate avec les pistes "ongoing", plus longues que prevu).
+  function playTrack(src, { loop = false, fallbackMs = 8000 } = {}){
     const audio = new Audio(src);
     audio.loop = loop;
-    const done = loop ? null : new Promise((resolve) => {
-      let settled = false;
-      const finish = () => { if(!settled){ settled = true; resolve(); } };
-      audio.addEventListener('ended', finish, { once: true });
-      audio.addEventListener('error', finish, { once: true });
-      setTimeout(finish, fallbackMs);
-    });
+    let done = null;
+    if(!loop){
+      done = new Promise((resolve) => {
+        let settled = false;
+        let timer = null;
+        const finish = () => {
+          if(settled) return;
+          settled = true;
+          if(timer) clearTimeout(timer);
+          resolve();
+        };
+        const arm = (ms) => { if(timer) clearTimeout(timer); timer = setTimeout(finish, ms); };
+        arm(fallbackMs);
+        audio.addEventListener('loadedmetadata', () => {
+          if(isFinite(audio.duration)) arm(audio.duration * 1000 + 1000);
+        });
+        audio.addEventListener('ended', finish, { once: true });
+        audio.addEventListener('error', finish, { once: true });
+      });
+    }
     audio.play().catch(() => {});
     return { audio, done };
   }
@@ -445,14 +463,13 @@
       await sleep(450);
     }
 
-    chestWrap.classList.add('bursting'); // crossfade sprite ferme -> ouvert
-    await sleep(500);
+    chestWrap.classList.add('bursting'); // crossfade sprite ferme -> ouvert (se termine en parallele de la suite)
   }
 
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
   async function playOngoing(reward){
     burstWrap.classList.add('visible');
-    const { done } = playTrack(CONFIG.AUDIO.ongoing[reward], { fallbackMs: 4000 });
+    const { done } = playTrack(CONFIG.AUDIO.ongoing[reward]);
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
@@ -460,7 +477,7 @@
 
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
   async function playEnding(ev, reward){
-    const { audio, done } = playTrack(CONFIG.AUDIO.ending[reward], { fallbackMs: 3500 });
+    const { audio, done } = playTrack(CONFIG.AUDIO.ending[reward]);
 
     playFirework();
     resultIcon.classList.remove('rising');
@@ -482,7 +499,6 @@
     }
 
     burstWrap.classList.remove('visible');
-    await sleep(300);
   }
 
   function spawnFloatingIcon(){
