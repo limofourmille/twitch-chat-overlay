@@ -103,3 +103,37 @@ create table if not exists broadcaster_tokens (
 );
 
 alter table broadcaster_tokens enable row level security;
+
+
+-- Reglages de chevauchement audio de l'overlay, ajustables depuis
+-- chest-control.html (voir supabase/functions/update-chest-settings).
+-- Ligne unique (id = 1). Lecture publique (chest-overlay.html, anonyme, lit
+-- ces valeurs au demarrage et via Realtime) ; ecriture uniquement via la
+-- Edge Function (verifie que c'est bien le broadcaster).
+create table if not exists chest_settings (
+  id                         smallint primary key default 1,
+  -- Duree (ms) pendant laquelle le tour suivant de waiting.mp3 demarre
+  -- avant la fin reelle du tour courant (boucle sans coupure).
+  waiting_loop_overlap_ms    integer not null default 200 check (waiting_loop_overlap_ms between 0 and 5000),
+  -- Duree (ms) avant laquelle ongoing-<palier>.mp3 demarre par rapport a la
+  -- fin reelle de opening.mp3.
+  opening_ongoing_overlap_ms integer not null default 200 check (opening_ongoing_overlap_ms between 0 and 5000),
+  -- Duree (ms) avant laquelle ending-<palier>.mp3 demarre par rapport a la
+  -- fin reelle de ongoing-<palier>.mp3 (et duree avant laquelle la carte de
+  -- recompense se referme par rapport a la fin de ending-<palier>.mp3).
+  ongoing_ending_overlap_ms  integer not null default 200 check (ongoing_ending_overlap_ms between 0 and 5000),
+  updated_at                 timestamptz not null default now()
+);
+
+insert into chest_settings (id) values (1) on conflict (id) do nothing;
+
+alter table chest_settings enable row level security;
+
+create policy "chest_settings_public_read"
+  on chest_settings
+  for select
+  using (true);
+
+-- Ecriture : AUCUNE policy insert/update publique - voir update-chest-settings.
+
+alter publication supabase_realtime add table chest_settings;
