@@ -156,6 +156,7 @@
     <ul class="queue-list" id="queue-list"></ul>
 
     <button class="big" id="open-btn" disabled>Ouvrir le coffre</button>
+    <button class="ghost" id="close-btn">Fermer le coffre</button>
     <div id="trigger-status"></div>
   </div>
 
@@ -223,6 +224,7 @@
   const queueCountEl = document.getElementById('queue-count');
   const queueListEl = document.getElementById('queue-list');
   const openBtn = document.getElementById('open-btn');
+  const closeBtn = document.getElementById('close-btn');
   const triggerStatus = document.getElementById('trigger-status');
   const testView = document.getElementById('test-view');
   const testStatus = document.getElementById('test-status');
@@ -340,6 +342,30 @@
     await loadPendingEvents();
   }
 
+  // Ferme le coffre actuellement affiche sur l'overlay (le coffre ouvert et
+  // la recompense y restent affiches indefiniment jusqu'a cet appel) et
+  // laisse l'overlay enchainer sur le prochain evenement en attente.
+  async function closeChest(){
+    if(!accessToken) return;
+    closeBtn.disabled = true;
+    triggerStatus.textContent = 'Fermeture...';
+    triggerStatus.className = '';
+
+    const { data, error } = await sb.functions.invoke('close-chest', {
+      body: { access_token: accessToken },
+    });
+
+    closeBtn.disabled = false;
+    if(error || data?.error){
+      console.error('[chest-control] close-chest:', error || data.error);
+      triggerStatus.textContent = 'Erreur : ' + (data?.error || 'fermeture impossible.');
+      triggerStatus.className = 'err';
+      return;
+    }
+    triggerStatus.textContent = data.event ? 'Coffre ferme.' : 'Aucun coffre affiche actuellement.';
+    triggerStatus.className = data.event ? 'ok' : '';
+  }
+
   // Cree un faux evenement 'pending' (voir supabase/functions/create-test-event)
   // pour tester le flux complet sans attendre un vrai follow/sub.
   async function createTestEvent(kind){
@@ -447,6 +473,7 @@
   document.getElementById('logout-btn').addEventListener('click', logout);
   document.getElementById('denied-logout-btn').addEventListener('click', logout);
   openBtn.addEventListener('click', openChest);
+  closeBtn.addEventListener('click', closeChest);
   testView.querySelectorAll('button[data-test]').forEach((btn) => {
     btn.addEventListener('click', () => createTestEvent(btn.dataset.test));
   });
