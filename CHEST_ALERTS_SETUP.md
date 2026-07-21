@@ -91,6 +91,8 @@ supabase functions deploy twitch-eventsub --no-verify-jwt
 supabase functions deploy broadcaster-authorize --no-verify-jwt
 supabase functions deploy broadcaster-oauth-callback --no-verify-jwt
 supabase functions deploy open-chest
+supabase functions deploy create-test-event
+supabase functions deploy update-chest-settings
 ```
 
 Les trois premieres sont appelees directement par Twitch ou par un simple
