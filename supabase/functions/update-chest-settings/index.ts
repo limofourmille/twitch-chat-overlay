@@ -27,11 +27,16 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const FIELDS = ['waiting_loop_overlap_ms', 'opening_ongoing_overlap_ms', 'ongoing_ending_overlap_ms'] as const;
+const MS_FIELDS = ['waiting_loop_overlap_ms', 'opening_ongoing_overlap_ms', 'ongoing_ending_overlap_ms'] as const;
 
 function toValidMs(v: unknown): number | null {
   const n = Number(v);
   return Number.isInteger(n) && n >= 0 && n <= 5000 ? n : null;
+}
+
+function toValidPercent(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : null;
 }
 
 Deno.serve(async (req) => {
@@ -52,11 +57,14 @@ Deno.serve(async (req) => {
   }
 
   const update: Record<string, number> = {};
-  for (const field of FIELDS) {
+  for (const field of MS_FIELDS) {
     const ms = toValidMs(body?.[field]);
     if (ms === null) return json({ error: `${field} invalide (0-5000 attendu)` }, 400);
     update[field] = ms;
   }
+  const volume = toValidPercent(body?.volume_percent);
+  if (volume === null) return json({ error: 'volume_percent invalide (0-100 attendu)' }, 400);
+  update.volume_percent = volume;
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const { data, error } = await sb

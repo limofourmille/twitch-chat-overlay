@@ -125,6 +125,11 @@
     padding:6px 8px;
   }
   .setting-row .unit{ color:var(--muted); font-size:12px; }
+  .setting-row input[type="range"]{
+    width:140px;
+    accent-color: var(--fg);
+  }
+  .setting-row .range-value{ color:var(--fg); font-size:13px; width:40px; text-align:right; }
   #settings-status{ margin-top:8px; font-size:13px; min-height:18px; }
   #settings-status.ok{ color:var(--ok); }
   #settings-status.err{ color:var(--err); }
@@ -173,6 +178,15 @@
 
   <div id="settings-view" class="card settings-card" style="display:none;">
     <h2>Reglages audio</h2>
+
+    <div class="setting-row">
+      <label for="setting-volume">Volume (toutes les pistes)</label>
+      <div class="setting-input">
+        <input type="range" id="setting-volume" min="0" max="100" step="1">
+        <span class="range-value" id="setting-volume-value">100%</span>
+      </div>
+    </div>
+
     <p class="hint">Chevauchement (ms) entre chaque piste, pour une transition sans blanc. Plus la valeur est grande, plus la piste suivante demarre tot par rapport a la fin reelle de la precedente.</p>
 
     <div class="setting-row">
@@ -233,6 +247,8 @@
   const settingWaitingInput = document.getElementById('setting-waiting');
   const settingOpeningOngoingInput = document.getElementById('setting-opening-ongoing');
   const settingOngoingEndingInput = document.getElementById('setting-ongoing-ending');
+  const settingVolumeInput = document.getElementById('setting-volume');
+  const settingVolumeValue = document.getElementById('setting-volume-value');
   const settingsSaveBtn = document.getElementById('settings-save-btn');
 
   let twitchUser = null; // { id, login }
@@ -402,6 +418,8 @@
     settingWaitingInput.value = data.waiting_loop_overlap_ms;
     settingOpeningOngoingInput.value = data.opening_ongoing_overlap_ms;
     settingOngoingEndingInput.value = data.ongoing_ending_overlap_ms;
+    settingVolumeInput.value = data.volume_percent;
+    settingVolumeValue.textContent = data.volume_percent + '%';
   }
 
   async function saveSettings(){
@@ -416,6 +434,7 @@
         waiting_loop_overlap_ms: Number(settingWaitingInput.value),
         opening_ongoing_overlap_ms: Number(settingOpeningOngoingInput.value),
         ongoing_ending_overlap_ms: Number(settingOngoingEndingInput.value),
+        volume_percent: Number(settingVolumeInput.value),
       },
     });
 
@@ -478,6 +497,9 @@
     btn.addEventListener('click', () => createTestEvent(btn.dataset.test));
   });
   settingsSaveBtn.addEventListener('click', saveSettings);
+  settingVolumeInput.addEventListener('input', () => {
+    settingVolumeValue.textContent = settingVolumeInput.value + '%';
+  });
 
   async function init(){
     let token = extractTokenFromHash();
