@@ -322,6 +322,48 @@
     return manifest.rewardOrder.includes(rt) ? rt : 'commun';
   }
 
+  // ---------------------------- Autoplay bloque par le navigateur ----------------------------
+
+  // Un navigateur normal (teste en dehors d'OBS, ex. onglet Chrome ouvert
+  // directement sur cette page) refuse l'autoplay avec son tant qu'aucune
+  // interaction n'a eu lieu sur la page - ce qui arrive typiquement quand la
+  // page se charge alors qu'un coffre est deja en file : le premier
+  // audio.play() (boucle d'attente) est rejete silencieusement, sans son ni
+  // erreur visible. Des qu'une interaction survient (clic, touche...), on
+  // retente la lecture de tout ce qui est encore en pause. Dans OBS (source
+  // navigateur), l'autoplay avec son est autorise par defaut : ce mecanisme
+  // ne sert alors a rien mais ne genera pas non plus.
+  const activeAudios = new Set();
+  let autoplayUnlockArmed = false;
+
+  function armAutoplayUnlock(){
+    if(autoplayUnlockArmed) return;
+    autoplayUnlockArmed = true;
+    const retryAll = () => {
+      activeAudios.forEach((audio) => {
+        if(audio.paused && !audio.ended) audio.play().catch(() => {});
+      });
+    };
+    document.addEventListener('pointerdown', retryAll, { passive: true });
+    document.addEventListener('keydown', retryAll);
+  }
+
+  function attemptPlay(audio){
+    activeAudios.add(audio);
+    audio.addEventListener('ended', () => activeAudios.delete(audio), { once: true });
+    armAutoplayUnlock();
+    audio.play().catch((err) => {
+      console.warn('[chest-overlay] lecture audio bloquee (autoplay) - sera retentee a la premiere interaction sur la page:', err);
+    });
+  }
+
+  // A appeler chaque fois qu'on met en pause une piste volontairement (elle
+  // ne doit pas etre relancee plus tard par le mecanisme de deblocage
+  // autoplay au prochain clic).
+  function forgetAudio(audio){
+    activeAudios.delete(audio);
+  }
+
   // Meme prechargee, une piste a toujours un petit delai de demarrage reel
   // au moment du .play() (quelques dizaines de ms, incompressible). Pour que
   // la coupure soit imperceptible, la piste suivante demarre volontairement
@@ -415,7 +457,7 @@
         audio.addEventListener('error', finish, { once: true });
       });
     }
-    audio.play().catch(() => {});
+    attemptPlay(audio);
     return { audio, done };
   }
 
@@ -445,7 +487,7 @@
       if(hardStopped) return;
       const audio = preloadTrack(src);
       currentAudio = audio;
-      audio.play().catch(() => {});
+      attemptPlay(audio);
 
       const armNext = () => {
         if(hardStopped) return;
@@ -474,7 +516,7 @@
       stop(){
         hardStopped = true;
         stopRequested = true;
-        if(currentAudio) currentAudio.pause();
+        if(currentAudio){ currentAudio.pause(); forgetAudio(currentAudio); }
         resolveStopped();
       },
     };
@@ -610,7 +652,7 @@
 
     const videoPath = manifest.randomVideoPath(reward);
     if(videoPath){
-      audio.pause(); // la cinematique a son propre son
+      audio.pause(); forgetAudio(audio); // la cinematique a son propre son
       await tryPlayRewardVideo(videoPath);
     }else{
       rewardCardIcon.src = manifest.rewardIcon[reward];
