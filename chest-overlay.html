@@ -351,6 +351,7 @@
 
   function attemptPlay(audio){
     activeAudios.add(audio);
+    applyVolume(audio);
     audio.addEventListener('ended', () => activeAudios.delete(audio), { once: true });
     armAutoplayUnlock();
     audio.play().catch((err) => {
@@ -380,13 +381,24 @@
     waitingLoopOverlapMs: 200,
     openingOngoingOverlapMs: 200,
     ongoingEndingOverlapMs: 200,
+    volume: 1, // 0..1 - voir volume_percent (0-100) cote base/UI
   };
+
+  // Applique le volume courant a une piste (appelee a la creation ET a
+  // chaque changement de reglage pour les pistes deja en cours de lecture).
+  function applyVolume(audio){
+    audio.volume = SETTINGS.volume;
+  }
 
   function applySettings(row){
     if(!row) return;
     if(Number.isFinite(row.waiting_loop_overlap_ms)) SETTINGS.waitingLoopOverlapMs = row.waiting_loop_overlap_ms;
     if(Number.isFinite(row.opening_ongoing_overlap_ms)) SETTINGS.openingOngoingOverlapMs = row.opening_ongoing_overlap_ms;
     if(Number.isFinite(row.ongoing_ending_overlap_ms)) SETTINGS.ongoingEndingOverlapMs = row.ongoing_ending_overlap_ms;
+    if(Number.isFinite(row.volume_percent)){
+      SETTINGS.volume = Math.max(0, Math.min(100, row.volume_percent)) / 100;
+      activeAudios.forEach(applyVolume); // effet immediat sur ce qui joue deja
+    }
   }
 
   async function loadSettings(){

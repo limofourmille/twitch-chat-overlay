@@ -122,10 +122,17 @@ create table if not exists chest_settings (
   -- fin reelle de ongoing-<palier>.mp3 (et duree avant laquelle la carte de
   -- recompense se referme par rapport a la fin de ending-<palier>.mp3).
   ongoing_ending_overlap_ms  integer not null default 200 check (ongoing_ending_overlap_ms between 0 and 5000),
+  -- Volume (%) applique a toutes les pistes de l'overlay (attente, ouverture,
+  -- ongoing, ending). Ajustable en direct, y compris pendant la lecture.
+  volume_percent             integer not null default 100 check (volume_percent between 0 and 100),
   updated_at                 timestamptz not null default now()
 );
 
 insert into chest_settings (id) values (1) on conflict (id) do nothing;
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
+-- chest_settings sans la colonne volume_percent (ajoutee apres coup) :
+-- alter table chest_settings add column if not exists volume_percent integer not null default 100 check (volume_percent between 0 and 100);
 
 alter table chest_settings enable row level security;
 
