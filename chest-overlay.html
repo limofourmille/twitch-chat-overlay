@@ -332,8 +332,20 @@
   // de garder une valeur devinee a la main - sinon un fallback trop court
   // coupe la piste avant la fin reelle et desynchronise toute la suite
   // (constate avec les pistes "ongoing", plus longues que prevu).
-  function playTrack(src, { loop = false, fallbackMs = 8000 } = {}){
+  // Cree l'element audio et lance son chargement tout de suite, sans le
+  // jouer - a appeler en avance (pendant qu'une phase precedente joue
+  // encore) pour que le fichier soit deja pret au moment de playTrack().
+  // Sans ca, le fetch/decodage du fichier demarre seulement quand on appelle
+  // .play(), ce qui cree un petit blanc audible a chaque transition.
+  function preloadTrack(src){
     const audio = new Audio(src);
+    audio.preload = 'auto';
+    audio.load();
+    return audio;
+  }
+
+  function playTrack(srcOrAudio, { loop = false, fallbackMs = 8000 } = {}){
+    const audio = (srcOrAudio instanceof HTMLAudioElement) ? srcOrAudio : new Audio(srcOrAudio);
     audio.loop = loop;
     let done = null;
     if(!loop){
@@ -348,9 +360,17 @@
         };
         const arm = (ms) => { if(timer) clearTimeout(timer); timer = setTimeout(finish, ms); };
         arm(fallbackMs);
-        audio.addEventListener('loadedmetadata', () => {
-          if(isFinite(audio.duration)) arm(audio.duration * 1000 + 1000);
-        });
+        // Si la piste a ete prechargee (preloadTrack), les metadonnees sont
+        // deja chargees a ce stade et l'evenement 'loadedmetadata' ne se
+        // redeclenchera pas - il faut donc aussi verifier l'etat courant,
+        // pas seulement ecouter l'evenement.
+        if(audio.readyState >= HTMLMediaElement.HAVE_METADATA && isFinite(audio.duration) && audio.duration > 0){
+          arm(audio.duration * 1000 + 1000);
+        }else{
+          audio.addEventListener('loadedmetadata', () => {
+            if(isFinite(audio.duration)) arm(audio.duration * 1000 + 1000);
+          });
+        }
         audio.addEventListener('ended', finish, { once: true });
         audio.addEventListener('error', finish, { once: true });
       });
@@ -435,16 +455,24 @@
     chestWrap.classList.add('visible');
     stopWaitingAudio();
 
-    await playOpening();
-    await playOngoing(reward);
-    await playEnding(ev, reward);
+    // Precharge les 3 pistes tout de suite : chacune a ainsi toute la duree
+    // des phases precedentes pour finir de charger, et playTrack() n'a plus
+    // qu'a appeler .play() sur un fichier deja pret (plus de blanc du au
+    // fetch/decodage a chaque transition).
+    const openingAudio = preloadTrack(CONFIG.AUDIO.opening);
+    const ongoingAudio = preloadTrack(CONFIG.AUDIO.ongoing[reward]);
+    const endingAudio = preloadTrack(CONFIG.AUDIO.ending[reward]);
+
+    await playOpening(openingAudio);
+    await playOngoing(ongoingAudio);
+    await playEnding(ev, reward, endingAudio);
 
     chestWrap.classList.remove('visible', 'bursting');
   }
 
   // --- Phase 1 : montee en tension + explosion, calee sur opening.mp3 ---
-  async function playOpening(){
-    const { done } = playTrack(CONFIG.AUDIO.opening, { fallbackMs: 6500 });
+  async function playOpening(preloadedAudio){
+    const { done } = playTrack(preloadedAudio, { fallbackMs: 6500 });
 
     chestWrap.classList.add('shaking');
     await sleep(900);
@@ -467,17 +495,17 @@
   }
 
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
-  async function playOngoing(reward){
+  async function playOngoing(preloadedAudio){
     burstWrap.classList.add('visible');
-    const { done } = playTrack(CONFIG.AUDIO.ongoing[reward]);
+    const { done } = playTrack(preloadedAudio);
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
   }
 
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
-  async function playEnding(ev, reward){
-    const { audio, done } = playTrack(CONFIG.AUDIO.ending[reward]);
+  async function playEnding(ev, reward, preloadedAudio){
+    const { audio, done } = playTrack(preloadedAudio);
 
     playFirework();
     resultIcon.classList.remove('rising');
