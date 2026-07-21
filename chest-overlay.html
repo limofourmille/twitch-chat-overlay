@@ -240,6 +240,7 @@
   <button data-test="sub:1000">Test sub T1</button>
   <button data-test="sub:2000">Test sub T2</button>
   <button data-test="sub:3000">Test sub T3</button>
+  <button id="debug-close-btn">Fermer le coffre</button>
 </div>
 
 <div class="stage">
@@ -546,6 +547,25 @@
     else hideChest();
   }
 
+  // Le coffre ouvert + la recompense restent affiches indefiniment apres la
+  // phase de revelation, jusqu'a ce que le streamer clique "Fermer le
+  // coffre" sur chest-control.html (ou le bouton du panneau ?debug=1). Une
+  // seule ouverture est jamais affichee a la fois (traitement sequentiel de
+  // la file), donc un seul resolveur actif suffit.
+  let activeCloseResolve = null;
+
+  function waitForClose(){
+    return new Promise((resolve) => { activeCloseResolve = resolve; });
+  }
+
+  function forceClose(){
+    if(activeCloseResolve){
+      const resolve = activeCloseResolve;
+      activeCloseResolve = null;
+      resolve();
+    }
+  }
+
   const queue = [];
   let processing = false;
 
@@ -651,18 +671,24 @@
     resultIcon.classList.add('rising');
 
     const videoPath = manifest.randomVideoPath(reward);
+    let usedVideo = false;
     if(videoPath){
       audio.pause(); forgetAudio(audio); // la cinematique a son propre son
-      await tryPlayRewardVideo(videoPath);
+      usedVideo = await tryPlayRewardVideo(videoPath);
     }else{
       rewardCardIcon.src = manifest.rewardIcon[reward];
       rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
       rewardCardLogin.textContent = ev.twitch_login;
       rewardCard.classList.add('visible');
       await done;
-      rewardCard.classList.remove('visible');
     }
 
+    // Le coffre ouvert + la recompense restent affiches jusqu'a ce que le
+    // streamer clique "Fermer le coffre" - voir waitForClose/forceClose.
+    await waitForClose();
+
+    rewardCard.classList.remove('visible');
+    if(usedVideo){ rewardVideo.classList.remove('visible'); rewardVideo.removeAttribute('src'); }
     burstWrap.classList.remove('visible');
   }
 
@@ -692,16 +718,17 @@
     }, 70);
   }
 
+  // Se resout quand la video se termine (ou echoue) mais NE la masque pas :
+  // elle reste affichee (figee sur la derniere image) jusqu'a la fermeture
+  // manuelle du coffre - voir playEnding/waitForClose.
   function tryPlayRewardVideo(src){
     return new Promise((resolve) => {
       rewardVideo.src = src;
       const onEnded = () => cleanup(true);
       const onError = () => cleanup(false);
       function cleanup(ok){
-        rewardVideo.classList.remove('visible');
         rewardVideo.removeEventListener('ended', onEnded);
         rewardVideo.removeEventListener('error', onError);
-        rewardVideo.removeAttribute('src');
         resolve(ok);
       }
       rewardVideo.addEventListener('ended', onEnded);
@@ -758,6 +785,11 @@
         pendingList = pendingList.filter((p) => p.id !== payload.new.id);
         enqueueEvent(payload.new);
       })
+      // Le streamer a clique "Fermer le coffre" : on masque le coffre/la
+      // recompense actuellement affiches et on enchaine sur la suite.
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chest_events', filter: 'status=eq.consumed' }, () => {
+        forceClose();
+      })
       .subscribe();
   }
 
@@ -773,6 +805,7 @@
         if(testEvent) enqueueEvent(testEvent);
       });
     });
+    document.getElementById('debug-close-btn').addEventListener('click', forceClose);
   }
 
   async function init(){
