@@ -103,6 +103,31 @@
   #test-status{ margin-top:8px; font-size:13px; min-height:18px; }
   #test-status.ok{ color:var(--ok); }
   #test-status.err{ color:var(--err); }
+
+  .settings-card{ border-color:#2a4a5a; }
+  .settings-card h2{ font-size:14px; margin:0 0 4px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .settings-card p.hint{ color:var(--muted); font-size:12px; margin:0 0 14px; }
+  .setting-row{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px;
+    margin-bottom:12px;
+  }
+  .setting-row label{ font-size:13px; }
+  .setting-row .setting-input{ display:flex; align-items:center; gap:6px; }
+  .setting-row input[type="number"]{
+    width:80px;
+    font-family:inherit;
+    font-size:14px;
+    color:var(--fg);
+    background:#000;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:6px 8px;
+  }
+  .setting-row .unit{ color:var(--muted); font-size:12px; }
+  #settings-status{ margin-top:8px; font-size:13px; min-height:18px; }
+  #settings-status.ok{ color:var(--ok); }
+  #settings-status.err{ color:var(--err); }
 </style>
 </head>
 <body>
@@ -144,6 +169,27 @@
     </div>
     <div id="test-status"></div>
   </div>
+
+  <div id="settings-view" class="card settings-card" style="display:none;">
+    <h2>Reglages audio</h2>
+    <p class="hint">Chevauchement (ms) entre chaque piste, pour une transition sans blanc. Plus la valeur est grande, plus la piste suivante demarre tot par rapport a la fin reelle de la precedente.</p>
+
+    <div class="setting-row">
+      <label for="setting-waiting">Boucle d'attente (sur elle-meme)</label>
+      <div class="setting-input"><input type="number" id="setting-waiting" min="0" max="5000" step="10"><span class="unit">ms</span></div>
+    </div>
+    <div class="setting-row">
+      <label for="setting-opening-ongoing">Ouverture -&gt; jaillissement</label>
+      <div class="setting-input"><input type="number" id="setting-opening-ongoing" min="0" max="5000" step="10"><span class="unit">ms</span></div>
+    </div>
+    <div class="setting-row">
+      <label for="setting-ongoing-ending">Jaillissement -&gt; revelation</label>
+      <div class="setting-input"><input type="number" id="setting-ongoing-ending" min="0" max="5000" step="10"><span class="unit">ms</span></div>
+    </div>
+
+    <button id="settings-save-btn">Enregistrer</button>
+    <div id="settings-status"></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -180,6 +226,12 @@
   const triggerStatus = document.getElementById('trigger-status');
   const testView = document.getElementById('test-view');
   const testStatus = document.getElementById('test-status');
+  const settingsView = document.getElementById('settings-view');
+  const settingsStatus = document.getElementById('settings-status');
+  const settingWaitingInput = document.getElementById('setting-waiting');
+  const settingOpeningOngoingInput = document.getElementById('setting-opening-ongoing');
+  const settingOngoingEndingInput = document.getElementById('setting-ongoing-ending');
+  const settingsSaveBtn = document.getElementById('settings-save-btn');
 
   let twitchUser = null; // { id, login }
   let accessToken = null;
@@ -313,6 +365,45 @@
     await loadPendingEvents();
   }
 
+  // Reglages de chevauchement audio (table chest_settings) - lecture
+  // publique, ecriture uniquement via update-chest-settings (verifie le
+  // token broadcaster).
+  async function loadSettings(){
+    if(!sb) return;
+    const { data, error } = await sb.from('chest_settings').select('*').eq('id', 1).maybeSingle();
+    if(error){ console.error('[chest-control] chargement reglages:', error); return; }
+    if(!data) return;
+    settingWaitingInput.value = data.waiting_loop_overlap_ms;
+    settingOpeningOngoingInput.value = data.opening_ongoing_overlap_ms;
+    settingOngoingEndingInput.value = data.ongoing_ending_overlap_ms;
+  }
+
+  async function saveSettings(){
+    if(!accessToken) return;
+    settingsSaveBtn.disabled = true;
+    settingsStatus.textContent = 'Enregistrement...';
+    settingsStatus.className = '';
+
+    const { data, error } = await sb.functions.invoke('update-chest-settings', {
+      body: {
+        access_token: accessToken,
+        waiting_loop_overlap_ms: Number(settingWaitingInput.value),
+        opening_ongoing_overlap_ms: Number(settingOpeningOngoingInput.value),
+        ongoing_ending_overlap_ms: Number(settingOngoingEndingInput.value),
+      },
+    });
+
+    settingsSaveBtn.disabled = false;
+    if(error || data?.error){
+      console.error('[chest-control] update-chest-settings:', error || data.error);
+      settingsStatus.textContent = 'Erreur : ' + (data?.error || 'sauvegarde impossible.');
+      settingsStatus.className = 'err';
+      return;
+    }
+    settingsStatus.textContent = 'Reglages enregistres.';
+    settingsStatus.className = 'ok';
+  }
+
   async function showLoggedIn(){
     loginView.style.display = 'none';
 
@@ -321,15 +412,18 @@
       deniedLoginEl.textContent = twitchUser.login;
       appView.style.display = 'none';
       testView.style.display = 'none';
+      settingsView.style.display = 'none';
       return;
     }
 
     deniedView.style.display = 'none';
     appView.style.display = 'block';
     testView.style.display = 'block';
+    settingsView.style.display = 'block';
     userLoginEl.textContent = twitchUser.login;
     await loadPendingEvents();
     subscribeRealtime();
+    await loadSettings();
   }
 
   function logout(){
@@ -340,6 +434,7 @@
     deniedView.style.display = 'none';
     appView.style.display = 'none';
     testView.style.display = 'none';
+    settingsView.style.display = 'none';
   }
 
   document.getElementById('login-btn').addEventListener('click', () => {
@@ -355,6 +450,7 @@
   testView.querySelectorAll('button[data-test]').forEach((btn) => {
     btn.addEventListener('click', () => createTestEvent(btn.dataset.test));
   });
+  settingsSaveBtn.addEventListener('click', saveSettings);
 
   async function init(){
     let token = extractTokenFromHash();

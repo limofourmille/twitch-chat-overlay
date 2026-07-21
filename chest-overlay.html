@@ -328,7 +328,39 @@
   // un peu AVANT la fin reelle de la precedente plutot qu'exactement a la
   // fin : les deux se chevauchent legerement le temps que la nouvelle piste
   // soit vraiment audible, au lieu de laisser un blanc.
-  const TRANSITION_OVERLAP_MS = 200;
+  //
+  // Ajustable en direct depuis le panneau "Reglages audio" de
+  // chest-control.html (table chest_settings, voir loadSettings/
+  // subscribeSettingsRealtime plus bas) - ces valeurs par defaut ne servent
+  // que tant que Supabase n'est pas configure ou pas encore charge.
+  const SETTINGS = {
+    waitingLoopOverlapMs: 200,
+    openingOngoingOverlapMs: 200,
+    ongoingEndingOverlapMs: 200,
+  };
+
+  function applySettings(row){
+    if(!row) return;
+    if(Number.isFinite(row.waiting_loop_overlap_ms)) SETTINGS.waitingLoopOverlapMs = row.waiting_loop_overlap_ms;
+    if(Number.isFinite(row.opening_ongoing_overlap_ms)) SETTINGS.openingOngoingOverlapMs = row.opening_ongoing_overlap_ms;
+    if(Number.isFinite(row.ongoing_ending_overlap_ms)) SETTINGS.ongoingEndingOverlapMs = row.ongoing_ending_overlap_ms;
+  }
+
+  async function loadSettings(){
+    if(!sb) return;
+    const { data, error } = await sb.from('chest_settings').select('*').eq('id', 1).maybeSingle();
+    if(error){ console.error('[chest-overlay] chargement reglages:', error); return; }
+    applySettings(data);
+  }
+
+  function subscribeSettingsRealtime(){
+    if(!sb) return;
+    sb.channel('chest_settings_overlay')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chest_settings' }, (payload) => {
+        applySettings(payload.new);
+      })
+      .subscribe();
+  }
 
   // Cree l'element audio et lance son chargement tout de suite, sans le
   // jouer - a appeler en avance (pendant qu'une phase precedente joue
@@ -343,12 +375,12 @@
   }
 
   // Joue une piste et fournit une promesse qui se resout legerement AVANT
-  // la fin reelle (voir TRANSITION_OVERLAP_MS) - sert d'horloge maitresse
-  // pour enchainer la phase suivante en chevauchement plutot qu'avec un
-  // blanc. `fallbackMs` n'est qu'un filet de securite si le fichier est
-  // absent/404 ou l'autoplay bloque - des que sa vraie duree est connue, le
-  // delai se recalcule dessus.
-  function playTrack(srcOrAudio, { loop = false, fallbackMs = 8000 } = {}){
+  // la fin reelle (voir `overlapMs`) - sert d'horloge maitresse pour
+  // enchainer la phase suivante en chevauchement plutot qu'avec un blanc.
+  // `fallbackMs` n'est qu'un filet de securite si le fichier est absent/404
+  // ou l'autoplay bloque - des que sa vraie duree est connue, le delai se
+  // recalcule dessus.
+  function playTrack(srcOrAudio, { loop = false, fallbackMs = 8000, overlapMs = 200 } = {}){
     const audio = (srcOrAudio instanceof HTMLAudioElement) ? srcOrAudio : new Audio(srcOrAudio);
     audio.loop = loop;
     let done = null;
@@ -363,7 +395,7 @@
           resolve();
         };
         const arm = (ms) => { if(timer) clearTimeout(timer); timer = setTimeout(finish, Math.max(0, ms)); };
-        const armFromDuration = () => arm(audio.duration * 1000 - TRANSITION_OVERLAP_MS);
+        const armFromDuration = () => arm(audio.duration * 1000 - overlapMs);
         arm(fallbackMs);
         // Si la piste a ete prechargee (preloadTrack), les metadonnees sont
         // deja chargees a ce stade et l'evenement 'loadedmetadata' ne se
@@ -397,11 +429,11 @@
   let waitingController = null;
   let animating = false;
 
-  // Boucle waiting.mp3 en s'auto-chevauchant (meme principe que
-  // TRANSITION_OVERLAP_MS entre les phases) : audio.loop natif recree une
-  // toute petite coupure a chaque tour (surtout en MP3), donc on gere le
-  // bouclage nous-memes en prechargeant/demarrant le tour suivant un peu
-  // avant la fin du tour courant.
+  // Boucle waiting.mp3 en s'auto-chevauchant (meme principe que le
+  // chevauchement entre les phases) : audio.loop natif recree une toute
+  // petite coupure a chaque tour (surtout en MP3), donc on gere le bouclage
+  // nous-memes en prechargeant/demarrant le tour suivant un peu avant la fin
+  // du tour courant.
   function startWaitingLoop(src){
     let stopRequested = false;
     let hardStopped = false;
@@ -417,7 +449,7 @@
 
       const armNext = () => {
         if(hardStopped) return;
-        const ms = Math.max(0, (audio.duration * 1000) - TRANSITION_OVERLAP_MS);
+        const ms = Math.max(0, (audio.duration * 1000) - SETTINGS.waitingLoopOverlapMs);
         setTimeout(() => {
           if(hardStopped) return;
           if(stopRequested){ resolveStopped(); return; }
@@ -535,7 +567,7 @@
 
   // --- Phase 1 : montee en tension + explosion, calee sur opening.mp3 ---
   async function playOpening(preloadedAudio){
-    const { done } = playTrack(preloadedAudio, { fallbackMs: 6500 });
+    const { done } = playTrack(preloadedAudio, { fallbackMs: 6500, overlapMs: SETTINGS.openingOngoingOverlapMs });
 
     chestWrap.classList.add('shaking');
     await sleep(900);
@@ -560,7 +592,7 @@
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
   async function playOngoing(preloadedAudio){
     burstWrap.classList.add('visible');
-    const { done } = playTrack(preloadedAudio);
+    const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs });
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
@@ -568,7 +600,7 @@
 
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
   async function playEnding(ev, reward, preloadedAudio){
-    const { audio, done } = playTrack(preloadedAudio);
+    const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs });
 
     playFirework();
     resultIcon.classList.remove('rising');
@@ -714,6 +746,8 @@
       return; // mode test : pas de connexion Supabase necessaire.
     }
 
+    await loadSettings();
+    subscribeSettingsRealtime();
     await loadInitialPending(); // coffres deja en attente (ex. reload OBS en cours de stream)
     subscribeRealtime();
   }
