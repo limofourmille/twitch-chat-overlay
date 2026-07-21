@@ -322,21 +322,19 @@
     return manifest.rewardOrder.includes(rt) ? rt : 'commun';
   }
 
-  // Joue une piste et fournit une promesse qui se resout quand elle se
-  // termine - sert d'horloge maitresse pour caler la duree visuelle des
-  // phases sur la vraie duree de la musique.
-  //
-  // `fallbackMs` n'est qu'un filet de securite initial (fichier absent/404,
-  // autoplay bloque) : des que les metadonnees du fichier sont chargees, le
-  // delai de secours est recalcule sur la VRAIE duree (+ marge) plutot que
-  // de garder une valeur devinee a la main - sinon un fallback trop court
-  // coupe la piste avant la fin reelle et desynchronise toute la suite
-  // (constate avec les pistes "ongoing", plus longues que prevu).
+  // Meme prechargee, une piste a toujours un petit delai de demarrage reel
+  // au moment du .play() (quelques dizaines de ms, incompressible). Pour que
+  // la coupure soit imperceptible, la piste suivante demarre volontairement
+  // un peu AVANT la fin reelle de la precedente plutot qu'exactement a la
+  // fin : les deux se chevauchent legerement le temps que la nouvelle piste
+  // soit vraiment audible, au lieu de laisser un blanc.
+  const TRANSITION_OVERLAP_MS = 200;
+
   // Cree l'element audio et lance son chargement tout de suite, sans le
   // jouer - a appeler en avance (pendant qu'une phase precedente joue
   // encore) pour que le fichier soit deja pret au moment de playTrack().
   // Sans ca, le fetch/decodage du fichier demarre seulement quand on appelle
-  // .play(), ce qui cree un petit blanc audible a chaque transition.
+  // .play(), ce qui cree un blanc audible a chaque transition.
   function preloadTrack(src){
     const audio = new Audio(src);
     audio.preload = 'auto';
@@ -344,6 +342,12 @@
     return audio;
   }
 
+  // Joue une piste et fournit une promesse qui se resout legerement AVANT
+  // la fin reelle (voir TRANSITION_OVERLAP_MS) - sert d'horloge maitresse
+  // pour enchainer la phase suivante en chevauchement plutot qu'avec un
+  // blanc. `fallbackMs` n'est qu'un filet de securite si le fichier est
+  // absent/404 ou l'autoplay bloque - des que sa vraie duree est connue, le
+  // delai se recalcule dessus.
   function playTrack(srcOrAudio, { loop = false, fallbackMs = 8000 } = {}){
     const audio = (srcOrAudio instanceof HTMLAudioElement) ? srcOrAudio : new Audio(srcOrAudio);
     audio.loop = loop;
@@ -358,19 +362,23 @@
           if(timer) clearTimeout(timer);
           resolve();
         };
-        const arm = (ms) => { if(timer) clearTimeout(timer); timer = setTimeout(finish, ms); };
+        const arm = (ms) => { if(timer) clearTimeout(timer); timer = setTimeout(finish, Math.max(0, ms)); };
+        const armFromDuration = () => arm(audio.duration * 1000 - TRANSITION_OVERLAP_MS);
         arm(fallbackMs);
         // Si la piste a ete prechargee (preloadTrack), les metadonnees sont
         // deja chargees a ce stade et l'evenement 'loadedmetadata' ne se
         // redeclenchera pas - il faut donc aussi verifier l'etat courant,
         // pas seulement ecouter l'evenement.
         if(audio.readyState >= HTMLMediaElement.HAVE_METADATA && isFinite(audio.duration) && audio.duration > 0){
-          arm(audio.duration * 1000 + 1000);
+          armFromDuration();
         }else{
           audio.addEventListener('loadedmetadata', () => {
-            if(isFinite(audio.duration)) arm(audio.duration * 1000 + 1000);
+            if(isFinite(audio.duration)) armFromDuration();
           });
         }
+        // Filet de secours si jamais le chevauchement volontaire ne se
+        // declenchait pas (duree inconnue) : la vraie fin de piste reste un
+        // deuxieme point de sortie possible.
         audio.addEventListener('ended', finish, { once: true });
         audio.addEventListener('error', finish, { once: true });
       });
