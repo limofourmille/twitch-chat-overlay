@@ -394,8 +394,59 @@
   // l'ecran - c'est aussi toujours celui que open-chest declenchera en
   // premier (meme tri "plus ancien d'abord" cote serveur).
   let pendingList = [];
-  let waitingAudio = null;
+  let waitingController = null;
   let animating = false;
+
+  // Boucle waiting.mp3 en s'auto-chevauchant (meme principe que
+  // TRANSITION_OVERLAP_MS entre les phases) : audio.loop natif recree une
+  // toute petite coupure a chaque tour (surtout en MP3), donc on gere le
+  // bouclage nous-memes en prechargeant/demarrant le tour suivant un peu
+  // avant la fin du tour courant.
+  function startWaitingLoop(src){
+    let stopRequested = false;
+    let hardStopped = false;
+    let resolveStopped = null;
+    const stopped = new Promise((resolve) => { resolveStopped = resolve; });
+    let currentAudio = null;
+
+    function playSegment(){
+      if(hardStopped) return;
+      const audio = preloadTrack(src);
+      currentAudio = audio;
+      audio.play().catch(() => {});
+
+      const armNext = () => {
+        if(hardStopped) return;
+        const ms = Math.max(0, (audio.duration * 1000) - TRANSITION_OVERLAP_MS);
+        setTimeout(() => {
+          if(hardStopped) return;
+          if(stopRequested){ resolveStopped(); return; }
+          playSegment();
+        }, ms);
+      };
+      if(audio.readyState >= HTMLMediaElement.HAVE_METADATA && isFinite(audio.duration) && audio.duration > 0){
+        armNext();
+      }else{
+        audio.addEventListener('loadedmetadata', armNext, { once: true });
+      }
+    }
+
+    playSegment();
+
+    return {
+      // Termine le tour de boucle en cours (pas de coupure en plein milieu)
+      // puis se resout - a utiliser quand le streamer declenche l'ouverture.
+      requestStop(){ stopRequested = true; return stopped; },
+      // Coupe immediatement, sans attendre la fin du tour (ex. l'evenement
+      // disparait de la file sans jamais avoir ete declenche).
+      stop(){
+        hardStopped = true;
+        stopRequested = true;
+        if(currentAudio) currentAudio.pause();
+        resolveStopped();
+      },
+    };
+  }
 
   function showWaitingChest(ev){
     const reward = normalizeReward(ev.reward_type);
@@ -403,18 +454,14 @@
     chestSpriteOpen.src = manifest.chestImage(reward, 'open');
     chestWrap.classList.remove('bursting');
     chestWrap.classList.add('visible', 'idle-bob');
-    if(!waitingAudio){
-      waitingAudio = playTrack(CONFIG.AUDIO.waiting, { loop: true }).audio;
+    if(!waitingController){
+      waitingController = startWaitingLoop(CONFIG.AUDIO.waiting);
     }
   }
 
   function hideChest(){
     chestWrap.classList.remove('visible', 'idle-bob', 'bursting');
-    stopWaitingAudio();
-  }
-
-  function stopWaitingAudio(){
-    if(waitingAudio){ waitingAudio.pause(); waitingAudio = null; }
+    if(waitingController){ waitingController.stop(); waitingController = null; }
   }
 
   // Rafraichit l'affichage "en attente" d'apres pendingList - jamais pendant
@@ -461,15 +508,23 @@
     chestSpriteOpen.src = manifest.chestImage(reward, 'open');
     chestWrap.classList.remove('bursting', 'idle-bob');
     chestWrap.classList.add('visible');
-    stopWaitingAudio();
 
-    // Precharge les 3 pistes tout de suite : chacune a ainsi toute la duree
-    // des phases precedentes pour finir de charger, et playTrack() n'a plus
-    // qu'a appeler .play() sur un fichier deja pret (plus de blanc du au
-    // fetch/decodage a chaque transition).
+    // Precharge les 3 pistes tout de suite (pendant que la boucle d'attente
+    // termine son tour) : chacune a ainsi toute la duree necessaire pour
+    // finir de charger, et playTrack() n'a plus qu'a appeler .play() sur un
+    // fichier deja pret (plus de blanc du au fetch/decodage a chaque
+    // transition).
     const openingAudio = preloadTrack(CONFIG.AUDIO.opening);
     const ongoingAudio = preloadTrack(CONFIG.AUDIO.ongoing[reward]);
     const endingAudio = preloadTrack(CONFIG.AUDIO.ending[reward]);
+
+    // Laisse le tour de boucle "en attente" en cours se terminer
+    // naturellement (pas de coupure en plein milieu) avant d'enchainer sur
+    // l'ouverture - le chevauchement de fin de tour masque la transition.
+    if(waitingController){
+      await waitingController.requestStop();
+      waitingController = null;
+    }
 
     await playOpening(openingAudio);
     await playOngoing(ongoingAudio);
