@@ -40,11 +40,7 @@
     position:absolute; inset:0;
     width:100%; height:100%;
     object-fit:contain;
-    image-rendering:pixelated;
   }
-  .chest-sprite-open{ opacity:0; transition:opacity 0.4s ease; }
-  .chest-wrap.bursting .chest-sprite-closed{ opacity:0; transition:opacity 0.4s ease; }
-  .chest-wrap.bursting .chest-sprite-open{ opacity:1; }
 
   /* Coffre visible mais pas encore ouvert : un evenement est en attente
      que le streamer clique "Ouvrir le coffre" dans chest-control.html. */
@@ -247,8 +243,7 @@
   <div class="chest-wrap" id="chest-wrap">
     <div class="impact-flash" id="impact-flash"></div>
     <div class="burst"></div>
-    <img class="chest-sprite chest-sprite-closed" id="chest-sprite-closed" alt="">
-    <img class="chest-sprite chest-sprite-open" id="chest-sprite-open" alt="">
+    <img class="chest-sprite" id="chest-sprite" alt="">
   </div>
 
   <img class="firework" id="firework" alt="">
@@ -305,8 +300,7 @@
     : null;
 
   const chestWrap = document.getElementById('chest-wrap');
-  const chestSpriteClosed = document.getElementById('chest-sprite-closed');
-  const chestSpriteOpen = document.getElementById('chest-sprite-open');
+  const chestSprite = document.getElementById('chest-sprite');
   const impactFlash = document.getElementById('impact-flash');
   const firework = document.getElementById('firework');
   const burstWrap = document.getElementById('burst-wrap');
@@ -571,9 +565,7 @@
   }
 
   function showWaitingChest(ev){
-    const reward = normalizeReward(ev.reward_type);
-    chestSpriteClosed.src = manifest.chestImage(reward, 'closed');
-    chestSpriteOpen.src = manifest.chestImage(reward, 'open');
+    chestSprite.src = manifest.chestFrames[0]; // ferme
     chestWrap.classList.remove('bursting');
     chestWrap.classList.add('visible', 'idle-bob');
     if(!waitingController){
@@ -643,10 +635,9 @@
     const reward = normalizeReward(ev.reward_type);
 
     // Le coffre est normalement deja visible depuis l'etat d'attente ; on
-    // s'assure juste que le bon sprite est en place (utile si l'overlay a
+    // s'assure juste que le sprite ferme est en place (utile si l'overlay a
     // rechargé sans etre passe par cet etat, ex. mode ?simulate=/?debug=1).
-    chestSpriteClosed.src = manifest.chestImage(reward, 'closed');
-    chestSpriteOpen.src = manifest.chestImage(reward, 'open');
+    chestSprite.src = manifest.chestFrames[0];
     chestWrap.classList.remove('bursting', 'idle-bob');
     chestWrap.classList.add('visible');
 
@@ -682,8 +673,12 @@
     await sleep(900);
     chestWrap.classList.remove('shaking');
 
-    // Pas de sprite de fissure dans le pack (juste ferme/ouvert) : la tension
-    // se joue en a-coups + flashs qui s'enchainent jusqu'a la fin du morceau.
+    // Secousses/flashs inchanges : la tension se joue en a-coups qui
+    // s'enchainent jusqu'a la fin du morceau. Le coffre reste sur la frame 1
+    // (ferme) durant toute cette phase - la frame 4 (grand ouvert) n'est
+    // posee qu'au tout dernier moment, pour correspondre exactement au
+    // debut de ongoing-<palier>.mp3, qui demarre juste apres le retour de
+    // cette fonction.
     let trackEnded = false;
     done.then(() => { trackEnded = true; });
     while(!trackEnded){
@@ -695,7 +690,8 @@
       await sleep(450);
     }
 
-    chestWrap.classList.add('bursting'); // crossfade sprite ferme -> ouvert (se termine en parallele de la suite)
+    chestSprite.src = manifest.chestFrames[3]; // grand ouvert
+    chestWrap.classList.add('bursting'); // flash radial (voir .burst), en parallele de la suite
   }
 
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
