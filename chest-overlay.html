@@ -122,19 +122,43 @@
   }
   .burst-wrap.visible{ opacity:1; }
 
-  /* Rayons dessines a la main, dans la meme boite que .chest-sprite (donc
-     alignes sur l'ouverture du coffre sans reglage manuel) - visibles
-     seulement pendant .chest-wrap.bursting. */
+  /* Rayons CSS (clip-path), ancres au meme point que .impact-flash/.burst
+     (l'ouverture du coffre) - donc alignes sans reglage manuel. La forme de
+     chaque trapeze reprend les lignes laterales/basses des 3 croquis
+     originaux du streamer (rognes par le canevas 700x700 de depart), mais
+     etendue vers le haut et refermee par un bord plat au lieu d'etre coupee
+     par le bord de l'image. Visibles seulement pendant .chest-wrap.bursting. */
   .chest-ray{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:contain;
+    position:absolute; left:50%; top:45%;
+    transform-origin:50% 100%;
+    filter:blur(1px);
     opacity:0;
     pointer-events:none;
   }
   .chest-wrap.bursting .chest-ray{ animation: ray-pulse 1.4s ease-in-out infinite; }
-  .chest-ray-2{ animation-delay:0.2s; }
-  .chest-ray-3{ animation-delay:0.4s; }
+  /* Flare asymetrique vers la gauche (cf. light-ray-1.png). */
+  .chest-ray-1{
+    width:70vh; height:70vh;
+    transform:translate(-50%, -100%);
+    clip-path: polygon(48% 100%, 52% 100%, 72.4% 0%, 6.9% 0%);
+    background:linear-gradient(0deg, rgba(255,170,70,0.6), rgba(255,170,70,0));
+  }
+  /* Flare asymetrique vers la droite (cf. light-ray-2.png). */
+  .chest-ray-2{
+    width:119vh; height:70vh;
+    transform:translate(-50%, -100%);
+    clip-path: polygon(48% 100%, 52% 100%, 92.5% 0%, 49.4% 0%);
+    background:linear-gradient(0deg, rgba(255,120,60,0.6), rgba(255,120,60,0));
+    animation-delay:0.2s;
+  }
+  /* Flare symetrique, plus large (cf. light-ray-3.png). */
+  .chest-ray-3{
+    width:101.5vh; height:70vh;
+    transform:translate(-50%, -100%);
+    clip-path: polygon(48% 100%, 52% 100%, 93% 0%, 7% 0%);
+    background:linear-gradient(0deg, rgba(255,200,90,0.6), rgba(255,200,90,0));
+    animation-delay:0.4s;
+  }
   @keyframes ray-pulse{
     0%, 100%{ opacity:0.35; }
     50%{ opacity:0.65; }
@@ -246,9 +270,9 @@
     <div class="impact-flash" id="impact-flash"></div>
     <div class="burst"></div>
     <img class="chest-sprite" id="chest-sprite" alt="">
-    <img class="chest-ray chest-ray-1" id="chest-ray-1" alt="">
-    <img class="chest-ray chest-ray-2" id="chest-ray-2" alt="">
-    <img class="chest-ray chest-ray-3" id="chest-ray-3" alt="">
+    <div class="chest-ray chest-ray-1"></div>
+    <div class="chest-ray chest-ray-2"></div>
+    <div class="chest-ray chest-ray-3"></div>
   </div>
 
   <img class="firework" id="firework" alt="">
@@ -312,8 +336,6 @@
   const rewardCardTier = document.getElementById('reward-card-tier');
   const rewardCardLogin = document.getElementById('reward-card-login');
   const rewardVideo = document.getElementById('reward-video');
-  const chestRays = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
-  chestRays.forEach((el, i) => { el.src = manifest.lightRayFrames[i]; });
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 

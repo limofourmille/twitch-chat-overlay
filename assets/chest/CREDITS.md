@@ -6,9 +6,6 @@ par courtoisie et pour retrouver la source si besoin.
 - **Coffres** (`chests/chest-1.png` a `chest-4.png`) : dessin original du
   streamer (4 frames d'ouverture progressive), pas de licence tierce a
   documenter.
-- **Rayons de lumiere** (`chests/light-ray-1.png` a `light-ray-3.png`) :
-  dessin original du streamer (meme feuille que les coffres), pas de licence
-  tierce a documenter.
 - **Icones** (`icons/`) : [Game Icons](https://kenney.nl/assets/game-icons) +
   [Game Icons Expansion](https://kenney.nl/assets/game-icons-expansion) par
   Kenney. CC0.
