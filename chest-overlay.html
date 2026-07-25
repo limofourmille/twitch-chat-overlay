@@ -674,21 +674,22 @@
     chestWrap.classList.remove('shaking');
 
     // Secousses/flashs inchanges : la tension se joue en a-coups qui
-    // s'enchainent jusqu'a la fin du morceau. Le coffre ne s'entrouvre que
-    // jusqu'a la frame 2 pendant cette phase (jamais plus haut) - la frame 4
-    // (grand ouvert) n'est posee qu'au tout dernier moment, pour
+    // s'enchainent jusqu'a la fin du morceau. Le coffre alterne seulement
+    // entre les frames 1 et 2 pendant cette phase (jamais plus haut) - la
+    // frame 4 (grand ouvert) n'est posee qu'au tout dernier moment, pour
     // correspondre exactement au debut de ongoing-<palier>.mp3, qui demarre
     // juste apres le retour de cette fonction.
     let trackEnded = false;
     done.then(() => { trackEnded = true; });
-    let firstPulse = true;
+    let pulseCount = 0;
     while(!trackEnded){
       chestWrap.classList.remove('pulse');
       impactFlash.classList.remove('flash');
       void chestWrap.offsetWidth; // relance les animations CSS
       chestWrap.classList.add('pulse');
       impactFlash.classList.add('flash');
-      if(firstPulse){ chestSprite.src = manifest.chestFrames[1]; firstPulse = false; } // frame 2, plafond avant l'ouverture complete
+      pulseCount++;
+      chestSprite.src = manifest.chestFrames[pulseCount % 2]; // alterne frame 1/2
       await sleep(450);
     }
 
