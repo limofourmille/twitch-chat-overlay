@@ -377,10 +377,15 @@
   // chest-control.html (table chest_settings, voir loadSettings/
   // subscribeSettingsRealtime plus bas) - ces valeurs par defaut ne servent
   // que tant que Supabase n'est pas configure ou pas encore charge.
+  // opening.mp3 et waiting.mp3 sont les memes fichiers quel que soit le
+  // palier - ces deux chevauchements restent uniques. ongoing/ending
+  // dependent du palier (longueur, attaque... differentes), d'ou une valeur
+  // par palier pour ces deux transitions.
   const SETTINGS = {
     waitingLoopOverlapMs: 200,
-    openingOngoingOverlapMs: 200,
-    ongoingEndingOverlapMs: 200,
+    waitingOpeningOverlapMs: 200,
+    openingOngoingOverlapMs: { commun: 200, rare: 200, epique: 200 },
+    ongoingEndingOverlapMs: { commun: 200, rare: 200, epique: 200 },
     volume: 1, // 0..1 - voir volume_percent (0-100) cote base/UI
   };
 
@@ -393,8 +398,13 @@
   function applySettings(row){
     if(!row) return;
     if(Number.isFinite(row.waiting_loop_overlap_ms)) SETTINGS.waitingLoopOverlapMs = row.waiting_loop_overlap_ms;
-    if(Number.isFinite(row.opening_ongoing_overlap_ms)) SETTINGS.openingOngoingOverlapMs = row.opening_ongoing_overlap_ms;
-    if(Number.isFinite(row.ongoing_ending_overlap_ms)) SETTINGS.ongoingEndingOverlapMs = row.ongoing_ending_overlap_ms;
+    if(Number.isFinite(row.waiting_opening_overlap_ms)) SETTINGS.waitingOpeningOverlapMs = row.waiting_opening_overlap_ms;
+    for(const tier of manifest.rewardOrder){
+      const openKey = 'opening_ongoing_overlap_ms_' + tier;
+      if(Number.isFinite(row[openKey])) SETTINGS.openingOngoingOverlapMs[tier] = row[openKey];
+      const endKey = 'ongoing_ending_overlap_ms_' + tier;
+      if(Number.isFinite(row[endKey])) SETTINGS.ongoingEndingOverlapMs[tier] = row[endKey];
+    }
     if(Number.isFinite(row.volume_percent)){
       SETTINGS.volume = Math.max(0, Math.min(100, row.volume_percent)) / 100;
       activeAudios.forEach(applyVolume); // effet immediat sur ce qui joue deja
@@ -495,6 +505,17 @@
     let resolveStopped = null;
     const stopped = new Promise((resolve) => { resolveStopped = resolve; });
     let currentAudio = null;
+    let boundaryTimer = null;
+
+    // Programme (ou reprogramme) le point de sortie du tour en cours sur un
+    // chevauchement donne, par rapport a la duree reelle de `audio` ET au
+    // temps deja ecoule (requestStop() peut rearmer ceci en plein milieu
+    // d'un tour, pas seulement au tout debut).
+    function scheduleBoundary(audio, overlapMs, onBoundary){
+      if(boundaryTimer) clearTimeout(boundaryTimer);
+      const ms = Math.max(0, (audio.duration * 1000) - overlapMs - (audio.currentTime * 1000));
+      boundaryTimer = setTimeout(onBoundary, ms);
+    }
 
     function playSegment(){
       if(hardStopped) return;
@@ -502,19 +523,21 @@
       currentAudio = audio;
       attemptPlay(audio);
 
-      const armNext = () => {
+      const arm = () => {
         if(hardStopped) return;
-        const ms = Math.max(0, (audio.duration * 1000) - SETTINGS.waitingLoopOverlapMs);
-        setTimeout(() => {
+        // Chevauchement "boucle sur elle-meme" par defaut - requestStop()
+        // reprogramme immediatement sur le chevauchement "attente -> ouverture"
+        // des qu'il est appele, quel que soit le moment du tour en cours.
+        scheduleBoundary(audio, SETTINGS.waitingLoopOverlapMs, () => {
           if(hardStopped) return;
           if(stopRequested){ resolveStopped(); return; }
           playSegment();
-        }, ms);
+        });
       };
       if(audio.readyState >= HTMLMediaElement.HAVE_METADATA && isFinite(audio.duration) && audio.duration > 0){
-        armNext();
+        arm();
       }else{
-        audio.addEventListener('loadedmetadata', armNext, { once: true });
+        audio.addEventListener('loadedmetadata', arm, { once: true });
       }
     }
 
@@ -523,12 +546,24 @@
     return {
       // Termine le tour de boucle en cours (pas de coupure en plein milieu)
       // puis se resout - a utiliser quand le streamer declenche l'ouverture.
-      requestStop(){ stopRequested = true; return stopped; },
+      // Reprogramme tout de suite le point de sortie sur le chevauchement
+      // dedie "attente -> ouverture" plutot que d'attendre le prochain point
+      // de bouclage normal (qui utilise un chevauchement different).
+      requestStop(){
+        stopRequested = true;
+        if(currentAudio && isFinite(currentAudio.duration) && currentAudio.duration > 0){
+          scheduleBoundary(currentAudio, SETTINGS.waitingOpeningOverlapMs, () => {
+            if(!hardStopped) resolveStopped();
+          });
+        }
+        return stopped;
+      },
       // Coupe immediatement, sans attendre la fin du tour (ex. l'evenement
       // disparait de la file sans jamais avoir ete declenche).
       stop(){
         hardStopped = true;
         stopRequested = true;
+        if(boundaryTimer) clearTimeout(boundaryTimer);
         if(currentAudio){ currentAudio.pause(); forgetAudio(currentAudio); }
         resolveStopped();
       },
@@ -632,16 +667,16 @@
       waitingController = null;
     }
 
-    await playOpening(openingAudio);
-    await playOngoing(ongoingAudio);
+    await playOpening(reward, openingAudio);
+    await playOngoing(reward, ongoingAudio);
     await playEnding(ev, reward, endingAudio);
 
     chestWrap.classList.remove('visible', 'bursting');
   }
 
   // --- Phase 1 : montee en tension + explosion, calee sur opening.mp3 ---
-  async function playOpening(preloadedAudio){
-    const { done } = playTrack(preloadedAudio, { fallbackMs: 6500, overlapMs: SETTINGS.openingOngoingOverlapMs });
+  async function playOpening(reward, preloadedAudio){
+    const { done } = playTrack(preloadedAudio, { fallbackMs: 6500, overlapMs: SETTINGS.openingOngoingOverlapMs[reward] });
 
     chestWrap.classList.add('shaking');
     await sleep(900);
@@ -664,9 +699,9 @@
   }
 
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
-  async function playOngoing(preloadedAudio){
+  async function playOngoing(reward, preloadedAudio){
     burstWrap.classList.add('visible');
-    const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs });
+    const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
@@ -674,7 +709,7 @@
 
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
   async function playEnding(ev, reward, preloadedAudio){
-    const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs });
+    const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
 
     playFirework();
     resultIcon.classList.remove('rising');
