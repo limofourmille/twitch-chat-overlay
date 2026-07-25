@@ -73,6 +73,14 @@ Deno.serve(async (req) => {
   if (volume === null) return json({ error: 'volume_percent invalide (0-100 attendu)' }, 400);
   update.volume_percent = volume;
 
+  const originX = toValidPercent(body?.effect_origin_x_percent);
+  if (originX === null) return json({ error: 'effect_origin_x_percent invalide (0-100 attendu)' }, 400);
+  update.effect_origin_x_percent = originX;
+
+  const originY = toValidPercent(body?.effect_origin_y_percent);
+  if (originY === null) return json({ error: 'effect_origin_y_percent invalide (0-100 attendu)' }, 400);
+  update.effect_origin_y_percent = originY;
+
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const { data, error } = await sb
     .from('chest_settings')

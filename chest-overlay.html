@@ -123,7 +123,7 @@
   .burst-wrap.visible{ opacity:1; }
 
   .ray{
-    position:absolute; left:50%; bottom:50%;
+    position:absolute; left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
     width:160px; height:62vh;
     transform-origin:50% 100%;
     clip-path: polygon(46% 100%, 54% 100%, 100% 0%, 0% 0%);
@@ -139,7 +139,7 @@
   }
 
   .floating-icon{
-    position:absolute; left:50%; bottom:50%;
+    position:absolute; left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
     width:28px; height:28px;
     transform:translate(-50%, 0);
     animation: float-up 1.4s ease-out forwards;
@@ -151,7 +151,7 @@
   }
 
   .result-icon{
-    position:absolute; left:50%; bottom:50%;
+    position:absolute; left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
     width:64px; height:64px;
     transform:translate(-50%, 0);
     opacity:0;
@@ -402,6 +402,15 @@
     if(Number.isFinite(row.volume_percent)){
       SETTINGS.volume = Math.max(0, Math.min(100, row.volume_percent)) / 100;
       activeAudios.forEach(applyVolume); // effet immediat sur ce qui joue deja
+    }
+    // Position du point d'origine des rayons/pluie d'objets/icone de
+    // recompense - appliquee via une variable CSS, donc effet immediat meme
+    // si le coffre est deja affiche (aucun besoin de relancer l'animation).
+    if(Number.isFinite(row.effect_origin_x_percent)){
+      document.documentElement.style.setProperty('--fx-origin-x', row.effect_origin_x_percent + '%');
+    }
+    if(Number.isFinite(row.effect_origin_y_percent)){
+      document.documentElement.style.setProperty('--fx-origin-y', row.effect_origin_y_percent + '%');
     }
   }
 
