@@ -138,6 +138,13 @@ create table if not exists chest_settings (
   -- Volume (%) applique a toutes les pistes de l'overlay (attente, ouverture,
   -- ongoing, ending). Ajustable en direct, y compris pendant la lecture.
   volume_percent                      integer not null default 100 check (volume_percent between 0 and 100),
+  -- Position (%) du point d'origine des rayons lumineux, de la pluie
+  -- d'objets et de l'icone de recompense qui monte - cale par defaut sur
+  -- l'ouverture du coffre. Memes conventions que les proprietes CSS
+  -- left/bottom (0 = bord gauche/bas, 100 = bord droit/haut). Ajustable en
+  -- direct, y compris pendant que le coffre est affiche.
+  effect_origin_x_percent             integer not null default 50 check (effect_origin_x_percent between 0 and 100),
+  effect_origin_y_percent             integer not null default 50 check (effect_origin_y_percent between 0 and 100),
   updated_at                          timestamptz not null default now()
 );
 
@@ -146,6 +153,11 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings sans la colonne volume_percent (ajoutee apres coup) :
 -- alter table chest_settings add column if not exists volume_percent integer not null default 100 check (volume_percent between 0 and 100);
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
+-- chest_settings sans les colonnes effect_origin_x_percent/effect_origin_y_percent :
+-- alter table chest_settings add column if not exists effect_origin_x_percent integer not null default 50 check (effect_origin_x_percent between 0 and 100);
+-- alter table chest_settings add column if not exists effect_origin_y_percent integer not null default 50 check (effect_origin_y_percent between 0 and 100);
 
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings avec les anciennes colonnes uniques (sans distinction par

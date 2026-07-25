@@ -206,6 +206,27 @@
       </div>
     </div>
 
+    <hr class="settings-divider">
+
+    <p class="hint">Position d'origine des rayons lumineux, de la pluie d'objets et de l'icone de recompense (cale par defaut sur l'ouverture du coffre). Applique immediatement, meme pendant que le coffre est affiche - garde <a href="chest-overlay.html?debug=1" target="_blank" style="color:inherit;">chest-overlay.html?debug=1</a> ouvert dans un autre onglet pour regler a l'oeil.</p>
+
+    <div class="setting-row">
+      <label for="setting-origin-x">Position horizontale</label>
+      <div class="setting-input">
+        <input type="range" id="setting-origin-x" min="0" max="100" step="1">
+        <span class="range-value" id="setting-origin-x-value">50%</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <label for="setting-origin-y">Position verticale</label>
+      <div class="setting-input">
+        <input type="range" id="setting-origin-y" min="0" max="100" step="1">
+        <span class="range-value" id="setting-origin-y-value">50%</span>
+      </div>
+    </div>
+
+    <hr class="settings-divider">
+
     <p class="hint">Chevauchement (ms) entre chaque piste, pour une transition sans blanc. Plus la valeur est grande, plus la piste suivante demarre tot par rapport a la fin reelle de la precedente.</p>
 
     <div class="setting-row">
@@ -304,6 +325,10 @@
   const settingWaitingOpeningInput = document.getElementById('setting-waiting-opening');
   const settingVolumeInput = document.getElementById('setting-volume');
   const settingVolumeValue = document.getElementById('setting-volume-value');
+  const settingOriginXInput = document.getElementById('setting-origin-x');
+  const settingOriginXValue = document.getElementById('setting-origin-x-value');
+  const settingOriginYInput = document.getElementById('setting-origin-y');
+  const settingOriginYValue = document.getElementById('setting-origin-y-value');
   const settingsSaveBtn = document.getElementById('settings-save-btn');
   const tierTabsEl = document.getElementById('tier-tabs');
 
@@ -488,6 +513,10 @@
     });
     settingVolumeInput.value = data.volume_percent;
     settingVolumeValue.textContent = data.volume_percent + '%';
+    settingOriginXInput.value = data.effect_origin_x_percent;
+    settingOriginXValue.textContent = data.effect_origin_x_percent + '%';
+    settingOriginYInput.value = data.effect_origin_y_percent;
+    settingOriginYValue.textContent = data.effect_origin_y_percent + '%';
   }
 
   async function saveSettings(){
@@ -501,6 +530,8 @@
       waiting_loop_overlap_ms: Number(settingWaitingInput.value),
       waiting_opening_overlap_ms: Number(settingWaitingOpeningInput.value),
       volume_percent: Number(settingVolumeInput.value),
+      effect_origin_x_percent: Number(settingOriginXInput.value),
+      effect_origin_y_percent: Number(settingOriginYInput.value),
     };
     TIERS.forEach((tier) => {
       body['opening_ongoing_overlap_ms_' + tier] = Number(tierInputs[tier].openingOngoing.value);
@@ -570,6 +601,12 @@
   settingsSaveBtn.addEventListener('click', saveSettings);
   settingVolumeInput.addEventListener('input', () => {
     settingVolumeValue.textContent = settingVolumeInput.value + '%';
+  });
+  settingOriginXInput.addEventListener('input', () => {
+    settingOriginXValue.textContent = settingOriginXInput.value + '%';
+  });
+  settingOriginYInput.addEventListener('input', () => {
+    settingOriginYValue.textContent = settingOriginYInput.value + '%';
   });
 
   function showTier(tier){
