@@ -46,6 +46,11 @@ function toValidPercent(v: unknown): number | null {
   return Number.isInteger(n) && n >= 0 && n <= 100 ? n : null;
 }
 
+function toValidOffset(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= -100 && n <= 100 ? n : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
@@ -80,6 +85,14 @@ Deno.serve(async (req) => {
   const originY = toValidPercent(body?.effect_origin_y_percent);
   if (originY === null) return json({ error: 'effect_origin_y_percent invalide (0-100 attendu)' }, 400);
   update.effect_origin_y_percent = originY;
+
+  const rayOffsetX = toValidOffset(body?.ray_offset_x_percent);
+  if (rayOffsetX === null) return json({ error: 'ray_offset_x_percent invalide (-100 a 100 attendu)' }, 400);
+  update.ray_offset_x_percent = rayOffsetX;
+
+  const rayOffsetY = toValidOffset(body?.ray_offset_y_percent);
+  if (rayOffsetY === null) return json({ error: 'ray_offset_y_percent invalide (-100 a 100 attendu)' }, 400);
+  update.ray_offset_y_percent = rayOffsetY;
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const { data, error } = await sb

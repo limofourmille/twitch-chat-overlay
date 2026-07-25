@@ -145,6 +145,12 @@ create table if not exists chest_settings (
   -- direct, y compris pendant que le coffre est affiche.
   effect_origin_x_percent             integer not null default 50 check (effect_origin_x_percent between 0 and 100),
   effect_origin_y_percent             integer not null default 50 check (effect_origin_y_percent between 0 and 100),
+  -- Decalage (%, du conteneur du coffre) applique ensemble aux 3 rayons
+  -- lumineux (qui gardent leur ecartement relatif, cale sur les croquis
+  -- originaux) - pour corriger leur position sans toucher au code, en
+  -- regardant chest-overlay.html?debug=1 en direct pendant le reglage.
+  ray_offset_x_percent                integer not null default 0 check (ray_offset_x_percent between -100 and 100),
+  ray_offset_y_percent                integer not null default 0 check (ray_offset_y_percent between -100 and 100),
   updated_at                          timestamptz not null default now()
 );
 
@@ -158,6 +164,11 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- chest_settings sans les colonnes effect_origin_x_percent/effect_origin_y_percent :
 -- alter table chest_settings add column if not exists effect_origin_x_percent integer not null default 50 check (effect_origin_x_percent between 0 and 100);
 -- alter table chest_settings add column if not exists effect_origin_y_percent integer not null default 50 check (effect_origin_y_percent between 0 and 100);
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
+-- chest_settings sans les colonnes ray_offset_x_percent/ray_offset_y_percent :
+-- alter table chest_settings add column if not exists ray_offset_x_percent integer not null default 0 check (ray_offset_x_percent between -100 and 100);
+-- alter table chest_settings add column if not exists ray_offset_y_percent integer not null default 0 check (ray_offset_y_percent between -100 and 100);
 
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings avec les anciennes colonnes uniques (sans distinction par
