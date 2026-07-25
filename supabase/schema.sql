@@ -110,22 +110,35 @@ alter table broadcaster_tokens enable row level security;
 -- Ligne unique (id = 1). Lecture publique (chest-overlay.html, anonyme, lit
 -- ces valeurs au demarrage et via Realtime) ; ecriture uniquement via la
 -- Edge Function (verifie que c'est bien le broadcaster).
+-- opening.mp3 et waiting.mp3 sont les memes fichiers quel que soit le
+-- palier de recompense - ces deux chevauchements restent donc uniques
+-- (pas de variante par palier). ongoing-<palier>.mp3 et ending-<palier>.mp3
+-- different en revanche d'un palier a l'autre (longueur, attaque...), d'ou
+-- un chevauchement distinct par palier pour ces deux transitions.
 create table if not exists chest_settings (
-  id                         smallint primary key default 1,
+  id                                  smallint primary key default 1,
   -- Duree (ms) pendant laquelle le tour suivant de waiting.mp3 demarre
-  -- avant la fin reelle du tour courant (boucle sans coupure).
-  waiting_loop_overlap_ms    integer not null default 200 check (waiting_loop_overlap_ms between 0 and 5000),
+  -- avant la fin reelle du tour courant (boucle sur elle-meme, sans coupure).
+  waiting_loop_overlap_ms             integer not null default 200 check (waiting_loop_overlap_ms between 0 and 5000),
+  -- Duree (ms) avant laquelle opening.mp3 demarre par rapport a la fin du
+  -- tour de waiting.mp3 en cours, une fois l'ouverture declenchee.
+  waiting_opening_overlap_ms          integer not null default 200 check (waiting_opening_overlap_ms between 0 and 5000),
   -- Duree (ms) avant laquelle ongoing-<palier>.mp3 demarre par rapport a la
-  -- fin reelle de opening.mp3.
-  opening_ongoing_overlap_ms integer not null default 200 check (opening_ongoing_overlap_ms between 0 and 5000),
+  -- fin reelle de opening.mp3 - un reglage par palier.
+  opening_ongoing_overlap_ms_commun   integer not null default 200 check (opening_ongoing_overlap_ms_commun between 0 and 5000),
+  opening_ongoing_overlap_ms_rare     integer not null default 200 check (opening_ongoing_overlap_ms_rare between 0 and 5000),
+  opening_ongoing_overlap_ms_epique   integer not null default 200 check (opening_ongoing_overlap_ms_epique between 0 and 5000),
   -- Duree (ms) avant laquelle ending-<palier>.mp3 demarre par rapport a la
   -- fin reelle de ongoing-<palier>.mp3 (et duree avant laquelle la carte de
-  -- recompense se referme par rapport a la fin de ending-<palier>.mp3).
-  ongoing_ending_overlap_ms  integer not null default 200 check (ongoing_ending_overlap_ms between 0 and 5000),
+  -- recompense se referme par rapport a la fin de ending-<palier>.mp3) - un
+  -- reglage par palier.
+  ongoing_ending_overlap_ms_commun    integer not null default 200 check (ongoing_ending_overlap_ms_commun between 0 and 5000),
+  ongoing_ending_overlap_ms_rare      integer not null default 200 check (ongoing_ending_overlap_ms_rare between 0 and 5000),
+  ongoing_ending_overlap_ms_epique    integer not null default 200 check (ongoing_ending_overlap_ms_epique between 0 and 5000),
   -- Volume (%) applique a toutes les pistes de l'overlay (attente, ouverture,
   -- ongoing, ending). Ajustable en direct, y compris pendant la lecture.
-  volume_percent             integer not null default 100 check (volume_percent between 0 and 100),
-  updated_at                 timestamptz not null default now()
+  volume_percent                      integer not null default 100 check (volume_percent between 0 and 100),
+  updated_at                          timestamptz not null default now()
 );
 
 insert into chest_settings (id) values (1) on conflict (id) do nothing;
@@ -133,6 +146,29 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings sans la colonne volume_percent (ajoutee apres coup) :
 -- alter table chest_settings add column if not exists volume_percent integer not null default 100 check (volume_percent between 0 and 100);
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
+-- chest_settings avec les anciennes colonnes uniques (sans distinction par
+-- palier, ni le chevauchement attente->ouverture) : ajoute les nouvelles
+-- colonnes (copie les anciennes valeurs comme point de depart pour chaque
+-- palier), puis retire les anciennes colonnes.
+-- alter table chest_settings add column if not exists waiting_opening_overlap_ms integer not null default 200 check (waiting_opening_overlap_ms between 0 and 5000);
+-- alter table chest_settings add column if not exists opening_ongoing_overlap_ms_commun integer not null default 200 check (opening_ongoing_overlap_ms_commun between 0 and 5000);
+-- alter table chest_settings add column if not exists opening_ongoing_overlap_ms_rare integer not null default 200 check (opening_ongoing_overlap_ms_rare between 0 and 5000);
+-- alter table chest_settings add column if not exists opening_ongoing_overlap_ms_epique integer not null default 200 check (opening_ongoing_overlap_ms_epique between 0 and 5000);
+-- alter table chest_settings add column if not exists ongoing_ending_overlap_ms_commun integer not null default 200 check (ongoing_ending_overlap_ms_commun between 0 and 5000);
+-- alter table chest_settings add column if not exists ongoing_ending_overlap_ms_rare integer not null default 200 check (ongoing_ending_overlap_ms_rare between 0 and 5000);
+-- alter table chest_settings add column if not exists ongoing_ending_overlap_ms_epique integer not null default 200 check (ongoing_ending_overlap_ms_epique between 0 and 5000);
+-- update chest_settings set
+--   opening_ongoing_overlap_ms_commun = opening_ongoing_overlap_ms,
+--   opening_ongoing_overlap_ms_rare = opening_ongoing_overlap_ms,
+--   opening_ongoing_overlap_ms_epique = opening_ongoing_overlap_ms,
+--   ongoing_ending_overlap_ms_commun = ongoing_ending_overlap_ms,
+--   ongoing_ending_overlap_ms_rare = ongoing_ending_overlap_ms,
+--   ongoing_ending_overlap_ms_epique = ongoing_ending_overlap_ms
+-- where id = 1;
+-- alter table chest_settings drop column if exists opening_ongoing_overlap_ms;
+-- alter table chest_settings drop column if exists ongoing_ending_overlap_ms;
 
 alter table chest_settings enable row level security;
 

@@ -27,7 +27,14 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const MS_FIELDS = ['waiting_loop_overlap_ms', 'opening_ongoing_overlap_ms', 'ongoing_ending_overlap_ms'] as const;
+const TIERS = ['commun', 'rare', 'epique'] as const;
+
+const MS_FIELDS = [
+  'waiting_loop_overlap_ms',
+  'waiting_opening_overlap_ms',
+  ...TIERS.map((t) => `opening_ongoing_overlap_ms_${t}`),
+  ...TIERS.map((t) => `ongoing_ending_overlap_ms_${t}`),
+] as const;
 
 function toValidMs(v: unknown): number | null {
   const n = Number(v);
