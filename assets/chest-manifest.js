@@ -21,6 +21,12 @@
   // ongoing-<palier>.mp3 (voir playOpening dans chest-overlay.html).
   const CHEST_FRAMES = [1, 2, 3, 4].map((n) => `assets/chest/chests/chest-${n}.png`);
 
+  // Rayons de lumiere (dessin original, meme feuille que le coffre) qui
+  // jaillissent au moment de l'ouverture - remplace l'ancien triptyque de
+  // formes CSS. Affiches dans la meme boite que chest-sprite (voir .chest-ray
+  // dans chest-overlay.html) pour rester alignes avec l'ouverture du coffre.
+  const LIGHT_RAY_FRAMES = [1, 2, 3].map((n) => `assets/chest/chests/light-ray-${n}.png`);
+
   // Icone qui monte et devient LE resultat (Kenney Game Icons/Expansion).
   const REWARD_ICON = {
     commun: 'assets/chest/icons/medal1.png',
@@ -59,6 +65,7 @@
     rewardOrder: REWARD_ORDER,
     rewardLabels: REWARD_LABELS,
     chestFrames: CHEST_FRAMES,
+    lightRayFrames: LIGHT_RAY_FRAMES,
     rewardIcon: REWARD_ICON,
     decorativeIcons: DECORATIVE_ICONS,
     fireworkFrames: FIREWORK_FRAMES,

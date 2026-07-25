@@ -122,17 +122,19 @@
   }
   .burst-wrap.visible{ opacity:1; }
 
-  .ray{
-    position:absolute; left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
-    width:160px; height:62vh;
-    transform-origin:50% 100%;
-    clip-path: polygon(46% 100%, 54% 100%, 100% 0%, 0% 0%);
-    filter:blur(1px);
-    animation: ray-pulse 1.4s ease-in-out infinite;
+  /* Rayons dessines a la main, dans la meme boite que .chest-sprite (donc
+     alignes sur l'ouverture du coffre sans reglage manuel) - visibles
+     seulement pendant .chest-wrap.bursting. */
+  .chest-ray{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:contain;
+    opacity:0;
+    pointer-events:none;
   }
-  .ray-0{ transform: translateX(-50%) rotate(-26deg); background:linear-gradient(0deg, rgba(255,130,60,0.55), rgba(255,130,60,0)); }
-  .ray-1{ transform: translateX(-50%) rotate(0deg); background:linear-gradient(0deg, rgba(255,80,80,0.6), rgba(255,80,80,0)); animation-delay:0.2s; }
-  .ray-2{ transform: translateX(-50%) rotate(26deg); background:linear-gradient(0deg, rgba(255,130,60,0.55), rgba(255,130,60,0)); animation-delay:0.4s; }
+  .chest-wrap.bursting .chest-ray{ animation: ray-pulse 1.4s ease-in-out infinite; }
+  .chest-ray-2{ animation-delay:0.2s; }
+  .chest-ray-3{ animation-delay:0.4s; }
   @keyframes ray-pulse{
     0%, 100%{ opacity:0.35; }
     50%{ opacity:0.65; }
@@ -244,14 +246,14 @@
     <div class="impact-flash" id="impact-flash"></div>
     <div class="burst"></div>
     <img class="chest-sprite" id="chest-sprite" alt="">
+    <img class="chest-ray chest-ray-1" id="chest-ray-1" alt="">
+    <img class="chest-ray chest-ray-2" id="chest-ray-2" alt="">
+    <img class="chest-ray chest-ray-3" id="chest-ray-3" alt="">
   </div>
 
   <img class="firework" id="firework" alt="">
 
   <div class="burst-wrap" id="burst-wrap">
-    <div class="ray ray-0"></div>
-    <div class="ray ray-1"></div>
-    <div class="ray ray-2"></div>
     <img class="result-icon" id="result-icon" alt="">
   </div>
 
@@ -310,6 +312,8 @@
   const rewardCardTier = document.getElementById('reward-card-tier');
   const rewardCardLogin = document.getElementById('reward-card-login');
   const rewardVideo = document.getElementById('reward-video');
+  const chestRays = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
+  chestRays.forEach((el, i) => { el.src = manifest.lightRayFrames[i]; });
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
