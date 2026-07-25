@@ -122,37 +122,43 @@
   }
   .burst-wrap.visible{ opacity:1; }
 
-  /* Rayons CSS (clip-path), ancres au meme point que .impact-flash/.burst
-     (l'ouverture du coffre) - donc alignes sans reglage manuel. La forme de
-     chaque trapeze reprend les lignes laterales/basses des 3 croquis
-     originaux du streamer (rognes par le canevas 700x700 de depart), mais
-     etendue vers le haut et refermee par un bord plat au lieu d'etre coupee
-     par le bord de l'image. Visibles seulement pendant .chest-wrap.bursting. */
+  /* Rayons CSS (clip-path). La forme de chaque trapeze ET son point d'ancrage
+     (left/top) reprennent tels quels les coordonnees mesurees dans les 3
+     croquis originaux du streamer (apex + lignes laterales/basses, sur leur
+     canevas source 700x700 - chest-wrap fait 192x192, un carre comme le
+     canevas, donc les fractions x/700 et y/700 se reportent directement en
+     % du conteneur, exactement comme le faisait avant l'ancienne version en
+     <img> avec object-fit:contain). Seule la hauteur est etendue vers le
+     haut et refermee par un bord plat au lieu d'etre coupee par le bord de
+     l'image. Visibles seulement pendant .chest-wrap.bursting. */
   .chest-ray{
-    position:absolute; left:50%; top:45%;
+    position:absolute;
     transform-origin:50% 100%;
     filter:blur(1px);
     opacity:0;
     pointer-events:none;
   }
   .chest-wrap.bursting .chest-ray{ animation: ray-pulse 1.4s ease-in-out infinite; }
-  /* Flare asymetrique vers la gauche (cf. light-ray-1.png). */
+  /* Apex a (302,397)/700 - cf. light-ray-1.png. */
   .chest-ray-1{
+    left:43.1%; top:56.7%;
     width:70vh; height:70vh;
     transform:translate(-50%, -100%);
     clip-path: polygon(48% 100%, 52% 100%, 72.4% 0%, 6.9% 0%);
     background:linear-gradient(0deg, rgba(255,170,70,0.6), rgba(255,170,70,0));
   }
-  /* Flare asymetrique vers la droite (cf. light-ray-2.png). */
+  /* Apex a (360,460)/700 - cf. light-ray-2.png. */
   .chest-ray-2{
+    left:51.4%; top:65.7%;
     width:119vh; height:70vh;
     transform:translate(-50%, -100%);
     clip-path: polygon(48% 100%, 52% 100%, 92.5% 0%, 49.4% 0%);
     background:linear-gradient(0deg, rgba(255,120,60,0.6), rgba(255,120,60,0));
     animation-delay:0.2s;
   }
-  /* Flare symetrique, plus large (cf. light-ray-3.png). */
+  /* Apex a (104,397)/700 - cf. light-ray-3.png. */
   .chest-ray-3{
+    left:14.9%; top:56.7%;
     width:101.5vh; height:70vh;
     transform:translate(-50%, -100%);
     clip-path: polygon(48% 100%, 52% 100%, 93% 0%, 7% 0%);
