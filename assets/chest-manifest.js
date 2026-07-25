@@ -14,12 +14,12 @@
     epique: 'Epique',
   };
 
-  // Sprite de coffre (Seliel the Shaper - Treasure Chests) : un design distinct
-  // par palier pour que la rarete se voit avant meme le resultat.
-  function chestImage(reward, state){
-    // state: 'closed' | 'open'
-    return `assets/chest/chests/chest-${reward}-${state}.png`;
-  }
+  // Coffre (dessin original) : le meme quel que soit le palier - seule
+  // l'icone de recompense finale (REWARD_ICON) differencie les paliers.
+  // 4 frames pour une ouverture progressive : ferme -> entrouvert x2 ->
+  // grand ouvert. La frame 4 doit correspondre au debut de la piste
+  // ongoing-<palier>.mp3 (voir playOpening dans chest-overlay.html).
+  const CHEST_FRAMES = [1, 2, 3, 4].map((n) => `assets/chest/chests/chest-${n}.png`);
 
   // Icone qui monte et devient LE resultat (Kenney Game Icons/Expansion).
   const REWARD_ICON = {
@@ -58,7 +58,7 @@
   window.CHEST_MANIFEST = {
     rewardOrder: REWARD_ORDER,
     rewardLabels: REWARD_LABELS,
-    chestImage,
+    chestFrames: CHEST_FRAMES,
     rewardIcon: REWARD_ICON,
     decorativeIcons: DECORATIVE_ICONS,
     fireworkFrames: FIREWORK_FRAMES,

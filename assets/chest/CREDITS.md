@@ -3,10 +3,9 @@
 Aucune de ces licences n'exige d'attribution publique, mais on la garde ici
 par courtoisie et pour retrouver la source si besoin.
 
-- **Coffres** (`chests/`) : [Treasure Chests](https://seliel-the-shaper.itch.io/treasure-chests)
-  par Seliel the Shaper. Gratuit, usage commercial autorise, licence
-  [Mana Seed User License](https://selieltheshaper.weebly.com/user-license.html)
-  (pas de credit requis).
+- **Coffres** (`chests/chest-1.png` a `chest-4.png`) : dessin original du
+  streamer (4 frames d'ouverture progressive), pas de licence tierce a
+  documenter.
 - **Icones** (`icons/`) : [Game Icons](https://kenney.nl/assets/game-icons) +
   [Game Icons Expansion](https://kenney.nl/assets/game-icons-expansion) par
   Kenney. CC0.
