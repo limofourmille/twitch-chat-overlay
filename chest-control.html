@@ -152,6 +152,25 @@
   .tier-tab-btn.active{ background:var(--fg); color:#000; border-color:var(--fg); }
   .tier-panel{ display:none; }
   .tier-panel.active{ display:block; }
+
+  /* Onglets de premier niveau dans la carte reglages (General / Pieces) -
+     separe les reglages des fontaines a pieces du reste pour ne pas
+     surcharger la vue par defaut. */
+  .main-tabs{ display:flex; gap:8px; margin:0 0 18px; }
+  .main-tab-btn{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    color:var(--fg);
+    background:transparent;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 16px;
+    cursor:pointer;
+  }
+  .main-tab-btn.active{ background:var(--fg); color:#000; border-color:var(--fg); }
+  .main-tab-panel{ display:none; }
+  .main-tab-panel.active{ display:block; }
 </style>
 </head>
 <body>
@@ -196,7 +215,14 @@
   </div>
 
   <div id="settings-view" class="card settings-card" style="display:none;">
-    <h2>Reglages audio</h2>
+    <h2>Reglages</h2>
+
+    <div class="main-tabs" id="main-tabs">
+      <button class="main-tab-btn" data-main-tab="general">General</button>
+      <button class="main-tab-btn" data-main-tab="coins">Pieces</button>
+    </div>
+
+    <div class="main-tab-panel" data-main-tab-panel="general">
 
     <div class="setting-row">
       <label for="setting-volume">Volume (toutes les pistes)</label>
@@ -359,6 +385,141 @@
       </div>
     </div>
 
+    </div>
+
+    <div class="main-tab-panel" data-main-tab-panel="coins">
+
+      <p class="hint">Reglages des fontaines a pieces (jaillissement). Appliques immediatement, meme coffre deja affiche : regle a l'oeil avec <a href="chest-overlay.html?debug=1" target="_blank" style="color:inherit;">chest-overlay.html?debug=1</a> ouvert a cote.</p>
+
+      <div class="setting-row">
+        <label for="setting-coin-opacity">Opacite des pieces</label>
+        <div class="setting-input">
+          <input type="range" id="setting-coin-opacity" min="0" max="100" step="1">
+          <span class="range-value" id="setting-coin-opacity-value">90%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-coin-visible">Duree avant disparition</label>
+        <div class="setting-input">
+          <input type="range" id="setting-coin-visible" min="0" max="100" step="1">
+          <span class="range-value" id="setting-coin-visible-value">45%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-coin-arc">Courbe des paraboles</label>
+        <div class="setting-input">
+          <input type="range" id="setting-coin-arc" min="0" max="300" step="5">
+          <span class="range-value" id="setting-coin-arc-value">100%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-coin-speed">Vitesse des pieces</label>
+        <div class="setting-input">
+          <input type="range" id="setting-coin-speed" min="10" max="300" step="5">
+          <span class="range-value" id="setting-coin-speed-value">100%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-coin-size-variation">Variation de taille</label>
+        <div class="setting-input">
+          <input type="range" id="setting-coin-size-variation" min="0" max="100" step="1">
+          <span class="range-value" id="setting-coin-size-variation-value">40%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-coin-sprite-speed">Vitesse de rotation</label>
+        <div class="setting-input">
+          <input type="range" id="setting-coin-sprite-speed" min="10" max="300" step="5">
+          <span class="range-value" id="setting-coin-sprite-speed-value">100%</span>
+        </div>
+      </div>
+
+      <hr class="settings-divider">
+
+      <p class="hint">Nombre de fontaines actives et position de chacune (un onglet par fontaine, seules les premieres "Nombre de fontaines" sont actives).</p>
+
+      <div class="setting-row">
+        <label for="setting-fountain-count">Nombre de fontaines</label>
+        <div class="setting-input">
+          <input type="range" id="setting-fountain-count" min="1" max="4" step="1">
+          <span class="range-value" id="setting-fountain-count-value">2</span>
+        </div>
+      </div>
+
+      <div class="tier-tabs" id="fountain-tabs">
+        <button class="tier-tab-btn" data-fountain="1">Fontaine 1</button>
+        <button class="tier-tab-btn" data-fountain="2">Fontaine 2</button>
+        <button class="tier-tab-btn" data-fountain="3">Fontaine 3</button>
+        <button class="tier-tab-btn" data-fountain="4">Fontaine 4</button>
+      </div>
+
+      <div class="tier-panel" data-fountain-panel="1">
+        <div class="setting-row">
+          <label for="setting-fountain1-x">Position horizontale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain1-x" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain1-x-value">6%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain1-y">Position verticale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain1-y" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain1-y-value">62%</span>
+          </div>
+        </div>
+      </div>
+      <div class="tier-panel" data-fountain-panel="2">
+        <div class="setting-row">
+          <label for="setting-fountain2-x">Position horizontale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain2-x" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain2-x-value">94%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain2-y">Position verticale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain2-y" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain2-y-value">62%</span>
+          </div>
+        </div>
+      </div>
+      <div class="tier-panel" data-fountain-panel="3">
+        <div class="setting-row">
+          <label for="setting-fountain3-x">Position horizontale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain3-x" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain3-x-value">6%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain3-y">Position verticale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain3-y" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain3-y-value">62%</span>
+          </div>
+        </div>
+      </div>
+      <div class="tier-panel" data-fountain-panel="4">
+        <div class="setting-row">
+          <label for="setting-fountain4-x">Position horizontale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain4-x" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain4-x-value">94%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain4-y">Position verticale</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain4-y" min="0" max="100" step="1">
+            <span class="range-value" id="setting-fountain4-y-value">62%</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
     <button id="settings-save-btn">Enregistrer</button>
     <div id="settings-status"></div>
   </div>
@@ -412,6 +573,22 @@
   const settingsSaveBtn = document.getElementById('settings-save-btn');
   const tierTabsEl = document.getElementById('tier-tabs');
   const rayTabsEl = document.getElementById('ray-tabs');
+  const mainTabsEl = document.getElementById('main-tabs');
+  const fountainTabsEl = document.getElementById('fountain-tabs');
+  const settingCoinOpacityInput = document.getElementById('setting-coin-opacity');
+  const settingCoinOpacityValue = document.getElementById('setting-coin-opacity-value');
+  const settingCoinVisibleInput = document.getElementById('setting-coin-visible');
+  const settingCoinVisibleValue = document.getElementById('setting-coin-visible-value');
+  const settingCoinArcInput = document.getElementById('setting-coin-arc');
+  const settingCoinArcValue = document.getElementById('setting-coin-arc-value');
+  const settingCoinSpeedInput = document.getElementById('setting-coin-speed');
+  const settingCoinSpeedValue = document.getElementById('setting-coin-speed-value');
+  const settingCoinSizeVariationInput = document.getElementById('setting-coin-size-variation');
+  const settingCoinSizeVariationValue = document.getElementById('setting-coin-size-variation-value');
+  const settingCoinSpriteSpeedInput = document.getElementById('setting-coin-sprite-speed');
+  const settingCoinSpriteSpeedValue = document.getElementById('setting-coin-sprite-speed-value');
+  const settingFountainCountInput = document.getElementById('setting-fountain-count');
+  const settingFountainCountValue = document.getElementById('setting-fountain-count-value');
 
   const TIERS = ['commun', 'rare', 'epique'];
   const tierInputs = {};
@@ -432,6 +609,17 @@
       yValue: document.getElementById(`setting-ray${n}-offset-y-value`),
       rotation: document.getElementById(`setting-ray${n}-rotation`),
       rotationValue: document.getElementById(`setting-ray${n}-rotation-value`),
+    };
+  });
+
+  const FOUNTAINS = [1, 2, 3, 4];
+  const fountainInputs = {};
+  FOUNTAINS.forEach((n) => {
+    fountainInputs[n] = {
+      x: document.getElementById(`setting-fountain${n}-x`),
+      xValue: document.getElementById(`setting-fountain${n}-x-value`),
+      y: document.getElementById(`setting-fountain${n}-y`),
+      yValue: document.getElementById(`setting-fountain${n}-y-value`),
     };
   });
 
@@ -622,6 +810,28 @@
       rayInputs[n].rotation.value = rot;
       rayInputs[n].rotationValue.textContent = rot + 'deg';
     });
+    settingCoinOpacityInput.value = data.coin_opacity_percent;
+    settingCoinOpacityValue.textContent = data.coin_opacity_percent + '%';
+    settingCoinVisibleInput.value = data.coin_visible_percent;
+    settingCoinVisibleValue.textContent = data.coin_visible_percent + '%';
+    settingCoinArcInput.value = data.coin_arc_height_percent;
+    settingCoinArcValue.textContent = data.coin_arc_height_percent + '%';
+    settingCoinSpeedInput.value = data.coin_speed_percent;
+    settingCoinSpeedValue.textContent = data.coin_speed_percent + '%';
+    settingCoinSizeVariationInput.value = data.coin_size_variation_percent;
+    settingCoinSizeVariationValue.textContent = data.coin_size_variation_percent + '%';
+    settingCoinSpriteSpeedInput.value = data.coin_sprite_speed_percent;
+    settingCoinSpriteSpeedValue.textContent = data.coin_sprite_speed_percent + '%';
+    settingFountainCountInput.value = data.coin_fountain_count;
+    settingFountainCountValue.textContent = data.coin_fountain_count;
+    FOUNTAINS.forEach((n) => {
+      const x = data[`fountain${n}_x_percent`];
+      const y = data[`fountain${n}_y_percent`];
+      fountainInputs[n].x.value = x;
+      fountainInputs[n].xValue.textContent = x + '%';
+      fountainInputs[n].y.value = y;
+      fountainInputs[n].yValue.textContent = y + '%';
+    });
   }
 
   async function saveSettings(){
@@ -646,6 +856,17 @@
       body[`ray${n}_offset_x_percent`] = Number(rayInputs[n].x.value);
       body[`ray${n}_offset_y_percent`] = Number(rayInputs[n].y.value);
       body[`ray${n}_rotation_deg`] = Number(rayInputs[n].rotation.value);
+    });
+    body.coin_opacity_percent = Number(settingCoinOpacityInput.value);
+    body.coin_visible_percent = Number(settingCoinVisibleInput.value);
+    body.coin_arc_height_percent = Number(settingCoinArcInput.value);
+    body.coin_speed_percent = Number(settingCoinSpeedInput.value);
+    body.coin_size_variation_percent = Number(settingCoinSizeVariationInput.value);
+    body.coin_sprite_speed_percent = Number(settingCoinSpriteSpeedInput.value);
+    body.coin_fountain_count = Number(settingFountainCountInput.value);
+    FOUNTAINS.forEach((n) => {
+      body[`fountain${n}_x_percent`] = Number(fountainInputs[n].x.value);
+      body[`fountain${n}_y_percent`] = Number(fountainInputs[n].y.value);
     });
 
     const { data, error } = await sb.functions.invoke('update-chest-settings', { body });
@@ -729,6 +950,35 @@
       rayInputs[n].rotationValue.textContent = rayInputs[n].rotation.value + 'deg';
     });
   });
+  settingCoinOpacityInput.addEventListener('input', () => {
+    settingCoinOpacityValue.textContent = settingCoinOpacityInput.value + '%';
+  });
+  settingCoinVisibleInput.addEventListener('input', () => {
+    settingCoinVisibleValue.textContent = settingCoinVisibleInput.value + '%';
+  });
+  settingCoinArcInput.addEventListener('input', () => {
+    settingCoinArcValue.textContent = settingCoinArcInput.value + '%';
+  });
+  settingCoinSpeedInput.addEventListener('input', () => {
+    settingCoinSpeedValue.textContent = settingCoinSpeedInput.value + '%';
+  });
+  settingCoinSizeVariationInput.addEventListener('input', () => {
+    settingCoinSizeVariationValue.textContent = settingCoinSizeVariationInput.value + '%';
+  });
+  settingCoinSpriteSpeedInput.addEventListener('input', () => {
+    settingCoinSpriteSpeedValue.textContent = settingCoinSpriteSpeedInput.value + '%';
+  });
+  settingFountainCountInput.addEventListener('input', () => {
+    settingFountainCountValue.textContent = settingFountainCountInput.value;
+  });
+  FOUNTAINS.forEach((n) => {
+    fountainInputs[n].x.addEventListener('input', () => {
+      fountainInputs[n].xValue.textContent = fountainInputs[n].x.value + '%';
+    });
+    fountainInputs[n].y.addEventListener('input', () => {
+      fountainInputs[n].yValue.textContent = fountainInputs[n].y.value + '%';
+    });
+  });
 
   function showTier(tier){
     tierTabsEl.querySelectorAll('.tier-tab-btn').forEach((btn) => {
@@ -755,6 +1005,32 @@
     btn.addEventListener('click', () => showRay(btn.dataset.ray));
   });
   showRay('1');
+
+  function showMainTab(tab){
+    mainTabsEl.querySelectorAll('.main-tab-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.mainTab === tab);
+    });
+    document.querySelectorAll('.main-tab-panel').forEach((panel) => {
+      panel.classList.toggle('active', panel.dataset.mainTabPanel === tab);
+    });
+  }
+  mainTabsEl.querySelectorAll('.main-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => showMainTab(btn.dataset.mainTab));
+  });
+  showMainTab('general');
+
+  function showFountain(fountain){
+    fountainTabsEl.querySelectorAll('.tier-tab-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.fountain === fountain);
+    });
+    document.querySelectorAll('.tier-panel[data-fountain-panel]').forEach((panel) => {
+      panel.classList.toggle('active', panel.dataset.fountainPanel === fountain);
+    });
+  }
+  fountainTabsEl.querySelectorAll('.tier-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => showFountain(btn.dataset.fountain));
+  });
+  showFountain('1');
 
   async function init(){
     let token = extractTokenFromHash();

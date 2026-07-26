@@ -192,36 +192,20 @@
     100%{ transform:translate(calc(-50% + var(--drift, 0px)), -60vh) scale(1); opacity:0; }
   }
 
-  /* Fontaines a pieces (une de chaque cote du coffre, dans .chest-wrap donc
-     ancrees pareil que .chest-sprite/.chest-ray). Trajectoire parabolique :
+  /* Fontaines a pieces (positions/nombre configurables - voir SETTINGS.coinFountains
+     et l'onglet "Pieces" de chest-control.html), dans .chest-wrap donc
+     ancrees pareil que .chest-sprite/.chest-ray. Trajectoire parabolique :
      resserree pres du coffre (faible variance sur --fly-peak-x), puis
      s'elargit vers le bas (forte variance sur --fly-x, tire au hasard par
-     piece dans spawnFountainCoin) - voir playOngoing. */
+     piece dans spawnFountainCoin). L'animation est creee dynamiquement en
+     JS (Web Animations API, voir spawnFountainCoin) plutot qu'en @keyframes
+     CSS statique, car la position du pic de la parabole et le debut du
+     fondu doivent pouvoir varier avec les reglages. */
   .coin-fountain{
     position:absolute;
-    width:46px; height:46px;
     object-fit:contain;
     opacity:0;
     pointer-events:none;
-    animation: coin-fountain-fly 900ms forwards;
-  }
-  .coin-fountain-left{ left:6%; top:62%; }
-  .coin-fountain-right{ left:94%; top:62%; }
-  @keyframes coin-fountain-fly{
-    0%{
-      transform:translate(-50%, -50%) translate(0, 0) scale(0.6);
-      opacity:0;
-      animation-timing-function: ease-out;
-    }
-    12%{ opacity:1; }
-    40%{
-      transform:translate(-50%, -50%) translate(var(--fly-peak-x, 0px), var(--fly-peak-y, -30px)) scale(0.85);
-      animation-timing-function: ease-in;
-    }
-    100%{
-      transform:translate(-50%, -50%) translate(var(--fly-x, 80px), var(--fly-y, 260px)) scale(1);
-      opacity:0;
-    }
   }
 
   .result-icon{
@@ -479,6 +463,17 @@
     openingOngoingOverlapMs: { commun: 200, rare: 200, epique: 200 },
     ongoingEndingOverlapMs: { commun: 200, rare: 200, epique: 200 },
     volume: 1, // 0..1 - voir volume_percent (0-100) cote base/UI
+    // Fontaines a pieces - voir spawnFountainCoin/startCoinFountain.
+    coinOpacity: 0.9,        // 0..1
+    coinVisibleFraction: 0.45, // 0..1 - part du vol a l'opacite max avant le fondu
+    coinArcHeightScale: 1,   // multiplie la hauteur de montee par defaut
+    coinSpeedScale: 1,       // multiplie la vitesse (duree = base / vitesse)
+    coinSizeVariation: 0.4,  // 0..1
+    coinSpriteSpeedScale: 1, // multiplie la vitesse du flipbook
+    coinFountains: [ // positions actives (%, gauche/haut) - defaut = cote gauche/droit
+      { x: 6, y: 62 },
+      { x: 94, y: 62 },
+    ],
   };
 
   // Applique le volume courant a une piste (appelee a la creation ET a
@@ -520,6 +515,26 @@
       if(Number.isFinite(x)) document.documentElement.style.setProperty(`--ray${n}-offset-x`, x + '%');
       if(Number.isFinite(y)) document.documentElement.style.setProperty(`--ray${n}-offset-y`, y + '%');
       if(Number.isFinite(rot)) document.documentElement.style.setProperty(`--ray${n}-rotation`, rot + 'deg');
+    }
+
+    // Fontaines a pieces (voir spawnFountainCoin) - pris en compte des le
+    // prochain coin genere, aucune animation en cours n'a besoin d'etre
+    // relancee.
+    if(Number.isFinite(row.coin_opacity_percent)) SETTINGS.coinOpacity = row.coin_opacity_percent / 100;
+    if(Number.isFinite(row.coin_visible_percent)) SETTINGS.coinVisibleFraction = row.coin_visible_percent / 100;
+    if(Number.isFinite(row.coin_arc_height_percent)) SETTINGS.coinArcHeightScale = row.coin_arc_height_percent / 100;
+    if(Number.isFinite(row.coin_speed_percent)) SETTINGS.coinSpeedScale = row.coin_speed_percent / 100;
+    if(Number.isFinite(row.coin_size_variation_percent)) SETTINGS.coinSizeVariation = row.coin_size_variation_percent / 100;
+    if(Number.isFinite(row.coin_sprite_speed_percent)) SETTINGS.coinSpriteSpeedScale = row.coin_sprite_speed_percent / 100;
+    if(Number.isFinite(row.coin_fountain_count)){
+      const count = Math.max(1, Math.min(4, row.coin_fountain_count));
+      const fountains = [];
+      for(let n = 1; n <= count; n++){
+        const x = row[`fountain${n}_x_percent`];
+        const y = row[`fountain${n}_y_percent`];
+        if(Number.isFinite(x) && Number.isFinite(y)) fountains.push({ x, y });
+      }
+      if(fountains.length > 0) SETTINGS.coinFountains = fountains;
     }
   }
 
@@ -844,10 +859,10 @@
   let stopCoinFountainFn = null;
   function startCoinFountain(intervalMs = 90){
     const timer = setInterval(() => {
-      spawnFountainCoin('left');
-      spawnFountainCoin('left');
-      spawnFountainCoin('right');
-      spawnFountainCoin('right');
+      SETTINGS.coinFountains.forEach((fountain) => {
+        spawnFountainCoin(fountain);
+        spawnFountainCoin(fountain);
+      });
     }, intervalMs);
     stopCoinFountainFn = () => {
       clearInterval(timer);
@@ -914,42 +929,69 @@
     el.addEventListener('animationend', () => el.remove());
   }
 
-  // Piece jaillissant d'un cote du coffre (voir .coin-fountain-left/right),
+  // Piece jaillissant d'une fontaine (fountain = {x, y} en % dans .chest-wrap),
   // trajectoire parabolique resserree pres du coffre et qui s'elargit vers
-  // le bas : --fly-peak-x (montee, faible variance) reste proche de 0,
-  // --fly-x (chute, forte variance 70-240px) fixe l'ecart final - c'est cet
-  // ecart tire au hasard par piece qui cree l'evasement du jet au fil de la
-  // chute. Fait tourner la piece sur elle-meme via le flipbook coinSpinFrames
-  // pendant tout le vol.
-  function spawnFountainCoin(side){
-    const dir = side === 'left' ? -1 : 1;
+  // le bas : peakX (montee, faible variance) reste proche de 0, flyX (chute,
+  // forte variance 70-240px de base, mis a l'echelle par les reglages)
+  // fixe l'ecart final - c'est cet ecart tire au hasard par piece qui cree
+  // l'evasement du jet au fil de la chute. Le sens (gauche/droite) est
+  // deduit de la position x de la fontaine par rapport au centre. Utilise
+  // le Web Animations API (plutot que @keyframes CSS statique) car la
+  // position du pic et le debut du fondu doivent varier avec SETTINGS.
+  function spawnFountainCoin(fountain){
+    const dir = fountain.x < 50 ? -1 : 1;
     const frames = manifest.coinSpinFrames;
     let frameIdx = Math.floor(Math.random() * frames.length);
 
     const el = document.createElement('img');
-    el.className = `coin-fountain coin-fountain-${side}`;
+    el.className = 'coin-fountain';
+    el.style.left = fountain.x + '%';
+    el.style.top = fountain.y + '%';
     el.src = frames[frameIdx];
 
-    const peakSpread = 8 + Math.random() * 20;   // 8-28px : resserre pres du coffre
-    const peakHeight = 16 + Math.random() * 30;  // 16-46px de montee avant la chute
-    const spread = 70 + Math.random() * 170;     // 70-240px : evase vers le bas
-    const fallDistance = 220 + Math.random() * 180; // 220-400px de chute
-    const duration = 750 + Math.random() * 400;  // 750-1150ms de vol
+    const baseSize = 46;
+    const variation = SETTINGS.coinSizeVariation; // 0..1
+    const size = Math.max(6, baseSize * (1 + (Math.random() * 2 - 1) * variation));
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
 
-    el.style.setProperty('--fly-peak-x', (dir * peakSpread) + 'px');
-    el.style.setProperty('--fly-peak-y', (-peakHeight) + 'px');
-    el.style.setProperty('--fly-x', (dir * spread) + 'px');
-    el.style.setProperty('--fly-y', fallDistance + 'px');
-    el.style.animationDuration = duration + 'ms';
+    const peakSpread = 8 + Math.random() * 20;      // 8-28px : resserre pres du coffre
+    const peakHeight = (16 + Math.random() * 30) * SETTINGS.coinArcHeightScale; // montee avant la chute
+    const spread = 70 + Math.random() * 170;        // 70-240px : evase vers le bas
+    const fallDistance = 220 + Math.random() * 180;  // 220-400px de chute
+    const baseDuration = 750 + Math.random() * 400;  // 750-1150ms de vol de base
+    const duration = Math.max(150, baseDuration / SETTINGS.coinSpeedScale);
+
+    const peakX = dir * peakSpread;
+    const peakY = -peakHeight;
+    const flyX = dir * spread;
+    const flyY = fallDistance;
+
+    // Le pic de la parabole reste a un instant fixe du vol (35%) ; le debut
+    // du fondu (coinVisibleFraction) est independant et peut tomber avant
+    // ou apres selon les reglages - le tri par offset ci-dessous garantit
+    // un tableau de keyframes valide dans tous les cas.
+    const peakOffset = 0.35;
+    const visibleOffset = Math.min(0.9, Math.max(0.13, SETTINGS.coinVisibleFraction));
+    const keyframeList = [
+      { offset: 0, transform: 'translate(-50%, -50%) translate(0px, 0px) scale(0.6)', opacity: 0, easing: 'ease-out' },
+      { offset: 0.12, opacity: SETTINGS.coinOpacity },
+      { offset: peakOffset, transform: `translate(-50%, -50%) translate(${peakX}px, ${peakY}px) scale(0.85)`, easing: 'ease-in' },
+      { offset: visibleOffset, opacity: SETTINGS.coinOpacity },
+      { offset: 1, transform: `translate(-50%, -50%) translate(${flyX}px, ${flyY}px) scale(1)`, opacity: 0 },
+    ].sort((a, b) => a.offset - b.offset);
 
     chestWrap.appendChild(el);
 
+    const anim = el.animate(keyframeList, { duration, fill: 'forwards' });
+
+    const frameIntervalMs = Math.max(15, 70 / SETTINGS.coinSpriteSpeedScale);
     const frameTimer = setInterval(() => {
       frameIdx = (frameIdx + 1) % frames.length;
       el.src = frames[frameIdx];
-    }, 70);
+    }, frameIntervalMs);
 
-    el.addEventListener('animationend', () => {
+    anim.addEventListener('finish', () => {
       clearInterval(frameTimer);
       el.remove();
     });
