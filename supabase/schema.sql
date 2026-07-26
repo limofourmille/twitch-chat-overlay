@@ -156,6 +156,11 @@ create table if not exists chest_settings (
   ray2_offset_y_percent               integer not null default 0 check (ray2_offset_y_percent between -100 and 100),
   ray3_offset_x_percent               integer not null default 0 check (ray3_offset_x_percent between -100 and 100),
   ray3_offset_y_percent               integer not null default 0 check (ray3_offset_y_percent between -100 and 100),
+  -- Rotation (deg) individuelle de chacun des 3 rayons, autour de leur
+  -- propre point d'ancrage (l'apex, cf. transform-origin de .chest-ray).
+  ray1_rotation_deg                   integer not null default 0 check (ray1_rotation_deg between -180 and 180),
+  ray2_rotation_deg                   integer not null default 0 check (ray2_rotation_deg between -180 and 180),
+  ray3_rotation_deg                   integer not null default 0 check (ray3_rotation_deg between -180 and 180),
   updated_at                          timestamptz not null default now()
 );
 
@@ -188,6 +193,12 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- where id = 1;
 -- alter table chest_settings drop column if exists ray_offset_x_percent;
 -- alter table chest_settings drop column if exists ray_offset_y_percent;
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
+-- chest_settings sans les colonnes ray1/2/3_rotation_deg :
+-- alter table chest_settings add column if not exists ray1_rotation_deg integer not null default 0 check (ray1_rotation_deg between -180 and 180);
+-- alter table chest_settings add column if not exists ray2_rotation_deg integer not null default 0 check (ray2_rotation_deg between -180 and 180);
+-- alter table chest_settings add column if not exists ray3_rotation_deg integer not null default 0 check (ray3_rotation_deg between -180 and 180);
 
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings sans les colonnes ray_offset_x_percent/ray_offset_y_percent :

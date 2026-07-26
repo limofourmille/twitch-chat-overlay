@@ -51,6 +51,11 @@ function toValidOffset(v: unknown): number | null {
   return Number.isInteger(n) && n >= -100 && n <= 100 ? n : null;
 }
 
+function toValidRotation(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= -180 && n <= 180 ? n : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
@@ -95,6 +100,11 @@ Deno.serve(async (req) => {
     const y = toValidOffset(body?.[yField]);
     if (y === null) return json({ error: `${yField} invalide (-100 a 100 attendu)` }, 400);
     update[yField] = y;
+
+    const rotField = `ray${ray}_rotation_deg`;
+    const rot = toValidRotation(body?.[rotField]);
+    if (rot === null) return json({ error: `${rotField} invalide (-180 a 180 attendu)` }, 400);
+    update[rotField] = rot;
   }
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
