@@ -150,7 +150,7 @@
     width:70vh; height:70vh;
     transform:translate(-50%, -100%) rotate(var(--ray1-rotation, 0deg));
     clip-path: polygon(48% 100%, 52% 100%, 72.4% 0%, 6.9% 0%);
-    background:linear-gradient(0deg, rgba(255,255,255,0.6), rgba(255,255,255,0));
+    background:linear-gradient(0deg, rgba(210,210,210,0.9), rgba(210,210,210,0.08));
   }
   /* Apex a (360,460)/700 - cf. light-ray-2.png. */
   .chest-ray-2{
@@ -158,7 +158,7 @@
     width:119vh; height:70vh;
     transform:translate(-50%, -100%) rotate(var(--ray2-rotation, 0deg));
     clip-path: polygon(48% 100%, 52% 100%, 92.5% 0%, 49.4% 0%);
-    background:linear-gradient(0deg, rgba(255,255,255,0.6), rgba(255,255,255,0));
+    background:linear-gradient(0deg, rgba(210,210,210,0.9), rgba(210,210,210,0.08));
     animation-delay:0.2s;
   }
   /* Apex a (104,397)/700 - cf. light-ray-3.png. */
@@ -167,12 +167,12 @@
     width:101.5vh; height:70vh;
     transform:translate(-50%, -100%) rotate(var(--ray3-rotation, 0deg));
     clip-path: polygon(48% 100%, 52% 100%, 75% 0%, 25% 0%);
-    background:linear-gradient(0deg, rgba(255,255,255,0.6), rgba(255,255,255,0));
+    background:linear-gradient(0deg, rgba(210,210,210,0.9), rgba(210,210,210,0.08));
     animation-delay:0.4s;
   }
   @keyframes ray-pulse{
-    0%, 100%{ opacity:0.35; }
-    50%{ opacity:0.65; }
+    0%, 100%{ opacity:0.65; }
+    50%{ opacity:0.95; }
   }
 
   .floating-icon{
