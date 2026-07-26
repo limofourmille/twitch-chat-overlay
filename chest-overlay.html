@@ -223,6 +223,24 @@
     pointer-events:none;
   }
 
+  /* Foule d'avatars dansants - palier epique uniquement. Une piece de
+     fontaine a 20% de chances de jaillir sous forme d'avatar (voir
+     spawnFountainCoin) ; a la fin de son vol, un avatar permanent est
+     ajoute ici (spawnCrowdAvatar), devant le coffre. Toutes les instances
+     (celles en vol ET celles de la foule) partagent la meme horloge de
+     frame (registerDanceElement) pour danser en synchro. */
+  .avatar-crowd{
+    position:absolute; inset:0;
+    pointer-events:none;
+  }
+  .avatar-crowd-member{
+    position:absolute;
+    width:52px; height:52px;
+    object-fit:contain;
+    transform:translate(-50%, -50%);
+    pointer-events:none;
+  }
+
   .result-icon{
     position:absolute; left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
     width:64px; height:64px;
@@ -343,6 +361,7 @@
     <div class="chest-ray chest-ray-1" id="chest-ray-1"></div>
     <div class="chest-ray chest-ray-2" id="chest-ray-2"></div>
     <div class="chest-ray chest-ray-3" id="chest-ray-3"></div>
+    <div class="avatar-crowd" id="avatar-crowd"></div>
   </div>
 
   <img class="firework" id="firework" alt="">
@@ -404,6 +423,7 @@
   const firework = document.getElementById('firework');
   const burstWrap = document.getElementById('burst-wrap');
   const chestRayEls = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
+  const avatarCrowdEl = document.getElementById('avatar-crowd');
   const resultIcon = document.getElementById('result-icon');
   const rewardCard = document.getElementById('reward-card');
   const rewardCardIcon = document.getElementById('reward-card-icon');
@@ -799,6 +819,7 @@
     chestSprite.src = manifest.chestFrames[0];
     chestWrap.classList.remove('bursting', 'idle-bob');
     chestWrap.classList.add('visible');
+    resetAvatarCrowd(); // repart d'une foule vide pour ce nouveau tirage
 
     // Precharge les 3 pistes tout de suite (pendant que la boucle d'attente
     // termine son tour) : chacune a ainsi toute la duree necessaire pour
@@ -880,15 +901,26 @@
     return stopRayCycleFn;
   }
 
+  // Fontaines actives selon le palier : follow ne montre que les 2
+  // premieres (comportement d'origine), sub T1/T2/T3 debloquent les 4 -
+  // dans la limite du nombre configure manuellement (SETTINGS.coinFountains,
+  // deja tronque a coin_fountain_count par applySettings).
+  function activeFountainsForReward(reward){
+    const count = reward === 'commun'
+      ? Math.min(2, SETTINGS.coinFountains.length)
+      : SETTINGS.coinFountains.length;
+    return SETTINGS.coinFountains.slice(0, count);
+  }
+
   // Fontaine a pieces continue des deux cotes du coffre (voir spawnFountainCoin
   // pour la trajectoire). stopCoinFountainFn est garde au niveau module pour
   // que forceStopEverything() puisse couper une fontaine laissee en cours.
   let stopCoinFountainFn = null;
-  function startCoinFountain(intervalMs = 90){
+  function startCoinFountain(reward, intervalMs = 90){
     const timer = setInterval(() => {
-      SETTINGS.coinFountains.forEach((fountain) => {
-        spawnFountainCoin(fountain);
-        spawnFountainCoin(fountain);
+      activeFountainsForReward(reward).forEach((fountain) => {
+        spawnFountainCoin(fountain, reward);
+        spawnFountainCoin(fountain, reward);
       });
     }, intervalMs);
     stopCoinFountainFn = () => {
@@ -902,7 +934,7 @@
   async function playOngoing(reward, preloadedAudio){
     burstWrap.classList.add('visible');
     const stopRayCycle = startRayCycle();
-    const stopCoinFountain = startCoinFountain();
+    const stopCoinFountain = startCoinFountain(reward);
     const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
@@ -956,21 +988,97 @@
     el.addEventListener('animationend', () => el.remove());
   }
 
-  // Piece jaillissant d'une fontaine (fountain = {x, y, arcHeightScale,
-  // arcWidthScale} en % dans .chest-wrap), trajectoire parabolique resserree
-  // pres du coffre et qui s'elargit vers le bas : peakX (montee, faible
-  // variance) reste proche de 0, flyX (chute, forte variance 70-240px de
-  // base, mis a l'echelle par arcWidthScale) fixe l'ecart final - c'est cet
-  // ecart tire au hasard par piece qui cree l'evasement du jet au fil de la
-  // chute. arcHeightScale met a l'echelle la hauteur de montee. Les deux
-  // sont individuels par fontaine (reglables dans chest-control.html). Le
-  // sens (gauche/droite) est deduit de la position x de la fontaine par
-  // rapport au centre. Utilise le Web Animations API (plutot que @keyframes
-  // CSS statique) car la position du pic et le debut du fondu doivent
-  // varier avec SETTINGS.
-  function spawnFountainCoin(fountain){
+  // Horloge de danse partagee : toutes les instances d'avatar (particule de
+  // fontaine ET membres de la foule) affichent le meme frame au meme
+  // instant, quel que soit leur moment de creation - c'est ce qui les
+  // garde synchronises entre eux.
+  const DANCE_FRAME_MS = 90;
+  let danceFrameIndex = 0;
+  let danceTimer = null;
+  const danceElements = new Set();
+
+  function registerDanceElement(el){
+    danceElements.add(el);
+    el.src = manifest.avatarDanceFrames[danceFrameIndex];
+    if(!danceTimer){
+      danceTimer = setInterval(() => {
+        danceFrameIndex = (danceFrameIndex + 1) % manifest.avatarDanceFrames.length;
+        const src = manifest.avatarDanceFrames[danceFrameIndex];
+        danceElements.forEach((danceEl) => { danceEl.src = src; });
+      }, DANCE_FRAME_MS);
+    }
+  }
+
+  function unregisterDanceElement(el){
+    danceElements.delete(el);
+    if(danceElements.size === 0 && danceTimer){
+      clearInterval(danceTimer);
+      danceTimer = null;
+    }
+  }
+
+  // Ajoute un avatar permanent devant le coffre (foule qui s'accumule au
+  // fil du jaillissement, palier epique) a l'emplacement `slot` (reserve au
+  // moment ou l'avatar a ete tire au sort dans spawnFountainCoin, pas a son
+  // atterrissage - voir crowdCount plus bas). Etale horizontalement en
+  // alternant les cotes, avec des rangees qui s'empilent vers l'arriere une
+  // fois une rangee pleine, pour former un vrai amas qui s'epaissit avec le
+  // temps plutot qu'une ligne qui s'etire a l'infini.
+  const CROWD_COLS = 9;
+  const CROWD_COL_SPACING_PX = 28;
+  const CROWD_ROW_SPACING_PERCENT = 6;
+  function spawnCrowdAvatar(slot){
+    const el = document.createElement('img');
+    el.className = 'avatar-crowd-member';
+    const col = slot % CROWD_COLS;
+    const row = Math.floor(slot / CROWD_COLS);
+    const centeredCol = col - (CROWD_COLS - 1) / 2;
+    el.style.left = `calc(50% + ${centeredCol * CROWD_COL_SPACING_PX}px)`;
+    el.style.top = (92 - row * CROWD_ROW_SPACING_PERCENT + (Math.random() * 3 - 1.5)) + '%';
+    avatarCrowdEl.appendChild(el);
+    registerDanceElement(el);
+  }
+
+  function resetAvatarCrowd(){
+    avatarCrowdEl.querySelectorAll('.avatar-crowd-member').forEach((el) => {
+      unregisterDanceElement(el);
+      el.remove();
+    });
+    crowdCount = 0;
+  }
+
+  // Chance qu'une piece de fontaine jaillisse sous forme d'avatar dansant
+  // plutot qu'une piece normale - reservee au palier epique (voir
+  // spawnFountainCoin). A la fin de son vol, un avatar rejoint la foule
+  // devant le coffre (spawnCrowdAvatar) au lieu de simplement disparaitre.
+  // Plafonnee a MAX_CROWD_SIZE : au-dela, la fontaine redevient des pieces
+  // normales - sans ca, le debit tres eleve des fontaines (voir "beaucoup
+  // plus de pieces") fait grossir la foule en un mur qui finit par recouvrir
+  // la carte de recompense en quelques secondes. crowdCount incremente des
+  // la decision (pas seulement a l'atterrissage) pour que la limite tienne
+  // meme quand plusieurs avatars sont tires coup sur coup avant que le
+  // premier n'ait fini son vol.
+  const AVATAR_CHANCE = 0.2;
+  const MAX_CROWD_SIZE = 40;
+  let crowdCount = 0;
+
+  // Piece (ou avatar, voir AVATAR_CHANCE) jaillissant d'une fontaine
+  // (fountain = {x, y, arcHeightScale, arcWidthScale} en % dans .chest-wrap),
+  // trajectoire parabolique resserree pres du coffre et qui s'elargit vers
+  // le bas : peakX (montee, faible variance) reste proche de 0, flyX
+  // (chute, forte variance 70-240px de base, mis a l'echelle par
+  // arcWidthScale) fixe l'ecart final - c'est cet ecart tire au hasard par
+  // piece qui cree l'evasement du jet au fil de la chute. arcHeightScale
+  // met a l'echelle la hauteur de montee. Les deux sont individuels par
+  // fontaine (reglables dans chest-control.html). Le sens (gauche/droite)
+  // est deduit de la position x de la fontaine par rapport au centre.
+  // Utilise le Web Animations API (plutot que @keyframes CSS statique) car
+  // la position du pic et le debut du fondu doivent varier avec SETTINGS.
+  function spawnFountainCoin(fountain, reward){
     const dir = fountain.x < 50 ? -1 : 1;
-    const frames = manifest.coinSpinFrames;
+    const isAvatar = reward === 'epique' && crowdCount < MAX_CROWD_SIZE && Math.random() < AVATAR_CHANCE;
+    const crowdSlot = isAvatar ? crowdCount++ : null; // reserve tout de suite, voir MAX_CROWD_SIZE
+    const frames = isAvatar ? manifest.avatarDanceFrames : manifest.coinSpinFrames;
     let frameIdx = Math.floor(Math.random() * frames.length);
 
     const el = document.createElement('img');
@@ -1017,14 +1125,24 @@
 
     const anim = el.animate(keyframeList, { duration, fill: 'forwards' });
 
-    const frameIntervalMs = Math.max(15, 70 / SETTINGS.coinSpriteSpeedScale);
-    const frameTimer = setInterval(() => {
-      frameIdx = (frameIdx + 1) % frames.length;
-      el.src = frames[frameIdx];
-    }, frameIntervalMs);
+    let frameTimer = null;
+    if(isAvatar){
+      registerDanceElement(el);
+    }else{
+      const frameIntervalMs = Math.max(15, 70 / SETTINGS.coinSpriteSpeedScale);
+      frameTimer = setInterval(() => {
+        frameIdx = (frameIdx + 1) % frames.length;
+        el.src = frames[frameIdx];
+      }, frameIntervalMs);
+    }
 
     anim.addEventListener('finish', () => {
-      clearInterval(frameTimer);
+      if(isAvatar){
+        unregisterDanceElement(el);
+        spawnCrowdAvatar(crowdSlot);
+      }else{
+        clearInterval(frameTimer);
+      }
       el.remove();
     });
   }
@@ -1142,6 +1260,7 @@
     if(waitingController){ waitingController.stop(); waitingController = null; }
     if(stopRayCycleFn) stopRayCycleFn();
     if(stopCoinFountainFn) stopCoinFountainFn();
+    resetAvatarCrowd();
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -1183,7 +1302,7 @@
       rewardCard.classList.remove('visible');
       rewardVideo.classList.remove('visible');
       startRayCycle(); // meme comportement que le vrai playOngoing
-      startCoinFountain();
+      startCoinFountain('epique'); // palier le plus riche, pour previsualiser tous les effets
       triggerOpenFlash();
     },
     reveal(){

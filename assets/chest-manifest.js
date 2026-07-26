@@ -39,6 +39,16 @@
     (n) => `assets/chest/coins/coin-spin-${n}.png`
   );
 
+  // Flipbook d'avatar qui danse (dessin original, 9 frames en boucle), reserve
+  // au palier epique : jaillit occasionnellement des fontaines (a la place
+  // d'une piece) puis rejoint la foule devant le coffre - voir
+  // spawnFountainCoin/spawnCrowdAvatar dans chest-overlay.html. Toutes les
+  // instances (fontaine + foule) partagent la meme horloge de frame pour
+  // danser en synchro.
+  const AVATAR_DANCE_FRAMES = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(
+    (n) => `assets/chest/avatars/avatar-dance-${n}.png`
+  );
+
   // Flipbook de feu d'artifice (8 frames, OpenGameArt "Fireworks") joue au
   // moment ou le resultat se revele.
   const FIREWORK_FRAMES = [0, 1, 2, 3, 4, 5, 6, 7].map(
@@ -69,6 +79,7 @@
     rewardIcon: REWARD_ICON,
     decorativeIcons: DECORATIVE_ICONS,
     coinSpinFrames: COIN_SPIN_FRAMES,
+    avatarDanceFrames: AVATAR_DANCE_FRAMES,
     fireworkFrames: FIREWORK_FRAMES,
     videoCounts: VIDEO_COUNTS,
     randomVideoPath,
