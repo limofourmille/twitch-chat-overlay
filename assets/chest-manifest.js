@@ -32,6 +32,13 @@
   // burst (jamais le resultat lui-meme) - simple pluie de pieces.
   const DECORATIVE_ICONS = ['assets/chest/icons/coin.png'];
 
+  // Flipbook de piece qui tourne (dessin original, 10 frames), utilise par
+  // les fontaines a pieces de chaque cote du coffre (voir spawnFountainCoin
+  // dans chest-overlay.html).
+  const COIN_SPIN_FRAMES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(
+    (n) => `assets/chest/coins/coin-spin-${n}.png`
+  );
+
   // Flipbook de feu d'artifice (8 frames, OpenGameArt "Fireworks") joue au
   // moment ou le resultat se revele.
   const FIREWORK_FRAMES = [0, 1, 2, 3, 4, 5, 6, 7].map(
@@ -61,6 +68,7 @@
     chestFrames: CHEST_FRAMES,
     rewardIcon: REWARD_ICON,
     decorativeIcons: DECORATIVE_ICONS,
+    coinSpinFrames: COIN_SPIN_FRAMES,
     fireworkFrames: FIREWORK_FRAMES,
     videoCounts: VIDEO_COUNTS,
     randomVideoPath,

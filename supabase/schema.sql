@@ -161,6 +161,39 @@ create table if not exists chest_settings (
   ray1_rotation_deg                   integer not null default 0 check (ray1_rotation_deg between -180 and 180),
   ray2_rotation_deg                   integer not null default 0 check (ray2_rotation_deg between -180 and 180),
   ray3_rotation_deg                   integer not null default 0 check (ray3_rotation_deg between -180 and 180),
+
+  -- Reglages des fontaines a pieces (voir spawnFountainCoin dans
+  -- chest-overlay.html) - onglet "Pieces" separe dans chest-control.html
+  -- pour ne pas surcharger l'onglet general.
+  -- Opacite max atteinte par une piece en vol.
+  coin_opacity_percent                integer not null default 90 check (coin_opacity_percent between 0 and 100),
+  -- Part (%) du vol pendant laquelle la piece reste a l'opacite max avant
+  -- de commencer a s'estomper (le reste du vol, jusqu'a 100%, est le fondu).
+  coin_visible_percent                integer not null default 45 check (coin_visible_percent between 0 and 100),
+  -- Hauteur de la montee parabolique avant la chute, en % de la hauteur
+  -- par defaut (100% = comportement d'origine, 0% = tombe direct sans arc).
+  coin_arc_height_percent             integer not null default 100 check (coin_arc_height_percent between 0 and 300),
+  -- Vitesse de vol des pieces (100% = duree par defaut, plus haut = plus rapide).
+  coin_speed_percent                  integer not null default 100 check (coin_speed_percent between 10 and 300),
+  -- Variation aleatoire de taille d'une piece a l'autre, en % de la taille de base.
+  coin_size_variation_percent         integer not null default 40 check (coin_size_variation_percent between 0 and 100),
+  -- Vitesse de rotation du flipbook de la piece (100% = vitesse par defaut).
+  coin_sprite_speed_percent           integer not null default 100 check (coin_sprite_speed_percent between 10 and 300),
+  -- Nombre de fontaines actives parmi les 4 positions definies ci-dessous.
+  coin_fountain_count                 integer not null default 2 check (coin_fountain_count between 1 and 4),
+  -- Position (%, memes conventions que effect_origin_x/y) de chacune des 4
+  -- fontaines possibles - seules les `coin_fountain_count` premieres sont
+  -- actives. Par defaut : 1 et 2 de chaque cote du coffre (comportement
+  -- d'origine), 3 et 4 au meme endroit tant qu'elles ne sont pas activees.
+  fountain1_x_percent                 integer not null default 6  check (fountain1_x_percent between 0 and 100),
+  fountain1_y_percent                 integer not null default 62 check (fountain1_y_percent between 0 and 100),
+  fountain2_x_percent                 integer not null default 94 check (fountain2_x_percent between 0 and 100),
+  fountain2_y_percent                 integer not null default 62 check (fountain2_y_percent between 0 and 100),
+  fountain3_x_percent                 integer not null default 6  check (fountain3_x_percent between 0 and 100),
+  fountain3_y_percent                 integer not null default 62 check (fountain3_y_percent between 0 and 100),
+  fountain4_x_percent                 integer not null default 94 check (fountain4_x_percent between 0 and 100),
+  fountain4_y_percent                 integer not null default 62 check (fountain4_y_percent between 0 and 100),
+
   updated_at                          timestamptz not null default now()
 );
 
@@ -199,6 +232,24 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- alter table chest_settings add column if not exists ray1_rotation_deg integer not null default 0 check (ray1_rotation_deg between -180 and 180);
 -- alter table chest_settings add column if not exists ray2_rotation_deg integer not null default 0 check (ray2_rotation_deg between -180 and 180);
 -- alter table chest_settings add column if not exists ray3_rotation_deg integer not null default 0 check (ray3_rotation_deg between -180 and 180);
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
+-- chest_settings sans les colonnes des fontaines a pieces :
+-- alter table chest_settings add column if not exists coin_opacity_percent integer not null default 90 check (coin_opacity_percent between 0 and 100);
+-- alter table chest_settings add column if not exists coin_visible_percent integer not null default 45 check (coin_visible_percent between 0 and 100);
+-- alter table chest_settings add column if not exists coin_arc_height_percent integer not null default 100 check (coin_arc_height_percent between 0 and 300);
+-- alter table chest_settings add column if not exists coin_speed_percent integer not null default 100 check (coin_speed_percent between 10 and 300);
+-- alter table chest_settings add column if not exists coin_size_variation_percent integer not null default 40 check (coin_size_variation_percent between 0 and 100);
+-- alter table chest_settings add column if not exists coin_sprite_speed_percent integer not null default 100 check (coin_sprite_speed_percent between 10 and 300);
+-- alter table chest_settings add column if not exists coin_fountain_count integer not null default 2 check (coin_fountain_count between 1 and 4);
+-- alter table chest_settings add column if not exists fountain1_x_percent integer not null default 6 check (fountain1_x_percent between 0 and 100);
+-- alter table chest_settings add column if not exists fountain1_y_percent integer not null default 62 check (fountain1_y_percent between 0 and 100);
+-- alter table chest_settings add column if not exists fountain2_x_percent integer not null default 94 check (fountain2_x_percent between 0 and 100);
+-- alter table chest_settings add column if not exists fountain2_y_percent integer not null default 62 check (fountain2_y_percent between 0 and 100);
+-- alter table chest_settings add column if not exists fountain3_x_percent integer not null default 6 check (fountain3_x_percent between 0 and 100);
+-- alter table chest_settings add column if not exists fountain3_y_percent integer not null default 62 check (fountain3_y_percent between 0 and 100);
+-- alter table chest_settings add column if not exists fountain4_x_percent integer not null default 94 check (fountain4_x_percent between 0 and 100);
+-- alter table chest_settings add column if not exists fountain4_y_percent integer not null default 62 check (fountain4_y_percent between 0 and 100);
 
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings sans les colonnes ray_offset_x_percent/ray_offset_y_percent :

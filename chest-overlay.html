@@ -192,6 +192,22 @@
     100%{ transform:translate(calc(-50% + var(--drift, 0px)), -60vh) scale(1); opacity:0; }
   }
 
+  /* Fontaines a pieces (positions/nombre configurables - voir SETTINGS.coinFountains
+     et l'onglet "Pieces" de chest-control.html), dans .chest-wrap donc
+     ancrees pareil que .chest-sprite/.chest-ray. Trajectoire parabolique :
+     resserree pres du coffre (faible variance sur --fly-peak-x), puis
+     s'elargit vers le bas (forte variance sur --fly-x, tire au hasard par
+     piece dans spawnFountainCoin). L'animation est creee dynamiquement en
+     JS (Web Animations API, voir spawnFountainCoin) plutot qu'en @keyframes
+     CSS statique, car la position du pic de la parabole et le debut du
+     fondu doivent pouvoir varier avec les reglages. */
+  .coin-fountain{
+    position:absolute;
+    object-fit:contain;
+    opacity:0;
+    pointer-events:none;
+  }
+
   .result-icon{
     position:absolute; left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
     width:64px; height:64px;
@@ -447,6 +463,17 @@
     openingOngoingOverlapMs: { commun: 200, rare: 200, epique: 200 },
     ongoingEndingOverlapMs: { commun: 200, rare: 200, epique: 200 },
     volume: 1, // 0..1 - voir volume_percent (0-100) cote base/UI
+    // Fontaines a pieces - voir spawnFountainCoin/startCoinFountain.
+    coinOpacity: 0.9,        // 0..1
+    coinVisibleFraction: 0.45, // 0..1 - part du vol a l'opacite max avant le fondu
+    coinArcHeightScale: 1,   // multiplie la hauteur de montee par defaut
+    coinSpeedScale: 1,       // multiplie la vitesse (duree = base / vitesse)
+    coinSizeVariation: 0.4,  // 0..1
+    coinSpriteSpeedScale: 1, // multiplie la vitesse du flipbook
+    coinFountains: [ // positions actives (%, gauche/haut) - defaut = cote gauche/droit
+      { x: 6, y: 62 },
+      { x: 94, y: 62 },
+    ],
   };
 
   // Applique le volume courant a une piste (appelee a la creation ET a
@@ -488,6 +515,26 @@
       if(Number.isFinite(x)) document.documentElement.style.setProperty(`--ray${n}-offset-x`, x + '%');
       if(Number.isFinite(y)) document.documentElement.style.setProperty(`--ray${n}-offset-y`, y + '%');
       if(Number.isFinite(rot)) document.documentElement.style.setProperty(`--ray${n}-rotation`, rot + 'deg');
+    }
+
+    // Fontaines a pieces (voir spawnFountainCoin) - pris en compte des le
+    // prochain coin genere, aucune animation en cours n'a besoin d'etre
+    // relancee.
+    if(Number.isFinite(row.coin_opacity_percent)) SETTINGS.coinOpacity = row.coin_opacity_percent / 100;
+    if(Number.isFinite(row.coin_visible_percent)) SETTINGS.coinVisibleFraction = row.coin_visible_percent / 100;
+    if(Number.isFinite(row.coin_arc_height_percent)) SETTINGS.coinArcHeightScale = row.coin_arc_height_percent / 100;
+    if(Number.isFinite(row.coin_speed_percent)) SETTINGS.coinSpeedScale = row.coin_speed_percent / 100;
+    if(Number.isFinite(row.coin_size_variation_percent)) SETTINGS.coinSizeVariation = row.coin_size_variation_percent / 100;
+    if(Number.isFinite(row.coin_sprite_speed_percent)) SETTINGS.coinSpriteSpeedScale = row.coin_sprite_speed_percent / 100;
+    if(Number.isFinite(row.coin_fountain_count)){
+      const count = Math.max(1, Math.min(4, row.coin_fountain_count));
+      const fountains = [];
+      for(let n = 1; n <= count; n++){
+        const x = row[`fountain${n}_x_percent`];
+        const y = row[`fountain${n}_y_percent`];
+        if(Number.isFinite(x) && Number.isFinite(y)) fountains.push({ x, y });
+      }
+      if(fountains.length > 0) SETTINGS.coinFountains = fountains;
     }
   }
 
@@ -806,14 +853,34 @@
     return stopRayCycleFn;
   }
 
+  // Fontaine a pieces continue des deux cotes du coffre (voir spawnFountainCoin
+  // pour la trajectoire). stopCoinFountainFn est garde au niveau module pour
+  // que forceStopEverything() puisse couper une fontaine laissee en cours.
+  let stopCoinFountainFn = null;
+  function startCoinFountain(intervalMs = 90){
+    const timer = setInterval(() => {
+      SETTINGS.coinFountains.forEach((fountain) => {
+        spawnFountainCoin(fountain);
+        spawnFountainCoin(fountain);
+      });
+    }, intervalMs);
+    stopCoinFountainFn = () => {
+      clearInterval(timer);
+      stopCoinFountainFn = null;
+    };
+    return stopCoinFountainFn;
+  }
+
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
   async function playOngoing(reward, preloadedAudio){
     burstWrap.classList.add('visible');
     const stopRayCycle = startRayCycle();
+    const stopCoinFountain = startCoinFountain();
     const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
+    stopCoinFountain();
     // Les 3 rayons restent affiches ensemble (pas de retour a "aucun
     // rayon") pendant toute la revelation - voir playEnding.
     stopRayCycle();
@@ -860,6 +927,74 @@
     el.style.left = (50 + (Math.random() * 20 - 10)) + '%';
     burstWrap.appendChild(el);
     el.addEventListener('animationend', () => el.remove());
+  }
+
+  // Piece jaillissant d'une fontaine (fountain = {x, y} en % dans .chest-wrap),
+  // trajectoire parabolique resserree pres du coffre et qui s'elargit vers
+  // le bas : peakX (montee, faible variance) reste proche de 0, flyX (chute,
+  // forte variance 70-240px de base, mis a l'echelle par les reglages)
+  // fixe l'ecart final - c'est cet ecart tire au hasard par piece qui cree
+  // l'evasement du jet au fil de la chute. Le sens (gauche/droite) est
+  // deduit de la position x de la fontaine par rapport au centre. Utilise
+  // le Web Animations API (plutot que @keyframes CSS statique) car la
+  // position du pic et le debut du fondu doivent varier avec SETTINGS.
+  function spawnFountainCoin(fountain){
+    const dir = fountain.x < 50 ? -1 : 1;
+    const frames = manifest.coinSpinFrames;
+    let frameIdx = Math.floor(Math.random() * frames.length);
+
+    const el = document.createElement('img');
+    el.className = 'coin-fountain';
+    el.style.left = fountain.x + '%';
+    el.style.top = fountain.y + '%';
+    el.src = frames[frameIdx];
+
+    const baseSize = 46;
+    const variation = SETTINGS.coinSizeVariation; // 0..1
+    const size = Math.max(6, baseSize * (1 + (Math.random() * 2 - 1) * variation));
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+
+    const peakSpread = 8 + Math.random() * 20;      // 8-28px : resserre pres du coffre
+    const peakHeight = (16 + Math.random() * 30) * SETTINGS.coinArcHeightScale; // montee avant la chute
+    const spread = 70 + Math.random() * 170;        // 70-240px : evase vers le bas
+    const fallDistance = 220 + Math.random() * 180;  // 220-400px de chute
+    const baseDuration = 750 + Math.random() * 400;  // 750-1150ms de vol de base
+    const duration = Math.max(150, baseDuration / SETTINGS.coinSpeedScale);
+
+    const peakX = dir * peakSpread;
+    const peakY = -peakHeight;
+    const flyX = dir * spread;
+    const flyY = fallDistance;
+
+    // Le pic de la parabole reste a un instant fixe du vol (35%) ; le debut
+    // du fondu (coinVisibleFraction) est independant et peut tomber avant
+    // ou apres selon les reglages - le tri par offset ci-dessous garantit
+    // un tableau de keyframes valide dans tous les cas.
+    const peakOffset = 0.35;
+    const visibleOffset = Math.min(0.9, Math.max(0.13, SETTINGS.coinVisibleFraction));
+    const keyframeList = [
+      { offset: 0, transform: 'translate(-50%, -50%) translate(0px, 0px) scale(0.6)', opacity: 0, easing: 'ease-out' },
+      { offset: 0.12, opacity: SETTINGS.coinOpacity },
+      { offset: peakOffset, transform: `translate(-50%, -50%) translate(${peakX}px, ${peakY}px) scale(0.85)`, easing: 'ease-in' },
+      { offset: visibleOffset, opacity: SETTINGS.coinOpacity },
+      { offset: 1, transform: `translate(-50%, -50%) translate(${flyX}px, ${flyY}px) scale(1)`, opacity: 0 },
+    ].sort((a, b) => a.offset - b.offset);
+
+    chestWrap.appendChild(el);
+
+    const anim = el.animate(keyframeList, { duration, fill: 'forwards' });
+
+    const frameIntervalMs = Math.max(15, 70 / SETTINGS.coinSpriteSpeedScale);
+    const frameTimer = setInterval(() => {
+      frameIdx = (frameIdx + 1) % frames.length;
+      el.src = frames[frameIdx];
+    }, frameIntervalMs);
+
+    anim.addEventListener('finish', () => {
+      clearInterval(frameTimer);
+      el.remove();
+    });
   }
 
   // Flipbook 8 frames joue une fois en fond au moment de la revelation.
@@ -966,6 +1101,7 @@
     activeCloseResolve = null;
     if(waitingController){ waitingController.stop(); waitingController = null; }
     if(stopRayCycleFn) stopRayCycleFn();
+    if(stopCoinFountainFn) stopCoinFountainFn();
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -1007,6 +1143,7 @@
       rewardCard.classList.remove('visible');
       rewardVideo.classList.remove('visible');
       startRayCycle(); // meme comportement que le vrai playOngoing
+      startCoinFountain();
     },
     reveal(){
       forceStopEverything();

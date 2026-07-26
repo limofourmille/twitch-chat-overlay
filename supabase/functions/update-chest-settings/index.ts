@@ -56,6 +56,11 @@ function toValidRotation(v: unknown): number | null {
   return Number.isInteger(n) && n >= -180 && n <= 180 ? n : null;
 }
 
+function toValidRange(v: unknown, min: number, max: number): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
@@ -105,6 +110,31 @@ Deno.serve(async (req) => {
     const rot = toValidRotation(body?.[rotField]);
     if (rot === null) return json({ error: `${rotField} invalide (-180 a 180 attendu)` }, 400);
     update[rotField] = rot;
+  }
+
+  const COIN_RANGE_FIELDS: [string, number, number][] = [
+    ['coin_opacity_percent', 0, 100],
+    ['coin_visible_percent', 0, 100],
+    ['coin_arc_height_percent', 0, 300],
+    ['coin_speed_percent', 10, 300],
+    ['coin_size_variation_percent', 0, 100],
+    ['coin_sprite_speed_percent', 10, 300],
+    ['coin_fountain_count', 1, 4],
+  ];
+  for (const [field, min, max] of COIN_RANGE_FIELDS) {
+    const n = toValidRange(body?.[field], min, max);
+    if (n === null) return json({ error: `${field} invalide (${min}-${max} attendu)` }, 400);
+    update[field] = n;
+  }
+  for (const fountain of [1, 2, 3, 4] as const) {
+    const xField = `fountain${fountain}_x_percent`;
+    const yField = `fountain${fountain}_y_percent`;
+    const x = toValidPercent(body?.[xField]);
+    if (x === null) return json({ error: `${xField} invalide (0-100 attendu)` }, 400);
+    update[xField] = x;
+    const y = toValidPercent(body?.[yField]);
+    if (y === null) return json({ error: `${yField} invalide (0-100 attendu)` }, 400);
+    update[yField] = y;
   }
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
