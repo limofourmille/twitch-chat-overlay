@@ -199,7 +199,7 @@
      piece dans spawnFountainCoin) - voir playOngoing. */
   .coin-fountain{
     position:absolute;
-    width:26px; height:26px;
+    width:46px; height:46px;
     object-fit:contain;
     opacity:0;
     pointer-events:none;
@@ -842,9 +842,11 @@
   // pour la trajectoire). stopCoinFountainFn est garde au niveau module pour
   // que forceStopEverything() puisse couper une fontaine laissee en cours.
   let stopCoinFountainFn = null;
-  function startCoinFountain(intervalMs = 180){
+  function startCoinFountain(intervalMs = 90){
     const timer = setInterval(() => {
       spawnFountainCoin('left');
+      spawnFountainCoin('left');
+      spawnFountainCoin('right');
       spawnFountainCoin('right');
     }, intervalMs);
     stopCoinFountainFn = () => {
