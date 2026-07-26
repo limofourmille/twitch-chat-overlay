@@ -466,13 +466,14 @@
     // Fontaines a pieces - voir spawnFountainCoin/startCoinFountain.
     coinOpacity: 0.9,        // 0..1
     coinVisibleFraction: 0.45, // 0..1 - part du vol a l'opacite max avant le fondu
-    coinArcHeightScale: 1,   // multiplie la hauteur de montee par defaut
     coinSpeedScale: 1,       // multiplie la vitesse (duree = base / vitesse)
     coinSizeVariation: 0.4,  // 0..1
     coinSpriteSpeedScale: 1, // multiplie la vitesse du flipbook
-    coinFountains: [ // positions actives (%, gauche/haut) - defaut = cote gauche/droit
-      { x: 6, y: 62 },
-      { x: 94, y: 62 },
+    // Positions actives (%, gauche/haut) + hauteur/largeur de parabole
+    // individuelles - defaut = cote gauche/droit, arc par defaut (100%).
+    coinFountains: [
+      { x: 6, y: 62, arcHeightScale: 1, arcWidthScale: 1 },
+      { x: 94, y: 62, arcHeightScale: 1, arcWidthScale: 1 },
     ],
   };
 
@@ -522,7 +523,6 @@
     // relancee.
     if(Number.isFinite(row.coin_opacity_percent)) SETTINGS.coinOpacity = row.coin_opacity_percent / 100;
     if(Number.isFinite(row.coin_visible_percent)) SETTINGS.coinVisibleFraction = row.coin_visible_percent / 100;
-    if(Number.isFinite(row.coin_arc_height_percent)) SETTINGS.coinArcHeightScale = row.coin_arc_height_percent / 100;
     if(Number.isFinite(row.coin_speed_percent)) SETTINGS.coinSpeedScale = row.coin_speed_percent / 100;
     if(Number.isFinite(row.coin_size_variation_percent)) SETTINGS.coinSizeVariation = row.coin_size_variation_percent / 100;
     if(Number.isFinite(row.coin_sprite_speed_percent)) SETTINGS.coinSpriteSpeedScale = row.coin_sprite_speed_percent / 100;
@@ -532,7 +532,15 @@
       for(let n = 1; n <= count; n++){
         const x = row[`fountain${n}_x_percent`];
         const y = row[`fountain${n}_y_percent`];
-        if(Number.isFinite(x) && Number.isFinite(y)) fountains.push({ x, y });
+        const arcHeight = row[`fountain${n}_arc_height_percent`];
+        const arcWidth = row[`fountain${n}_arc_width_percent`];
+        if(Number.isFinite(x) && Number.isFinite(y)){
+          fountains.push({
+            x, y,
+            arcHeightScale: Number.isFinite(arcHeight) ? arcHeight / 100 : 1,
+            arcWidthScale: Number.isFinite(arcWidth) ? arcWidth / 100 : 1,
+          });
+        }
       }
       if(fountains.length > 0) SETTINGS.coinFountains = fountains;
     }
@@ -929,15 +937,18 @@
     el.addEventListener('animationend', () => el.remove());
   }
 
-  // Piece jaillissant d'une fontaine (fountain = {x, y} en % dans .chest-wrap),
-  // trajectoire parabolique resserree pres du coffre et qui s'elargit vers
-  // le bas : peakX (montee, faible variance) reste proche de 0, flyX (chute,
-  // forte variance 70-240px de base, mis a l'echelle par les reglages)
-  // fixe l'ecart final - c'est cet ecart tire au hasard par piece qui cree
-  // l'evasement du jet au fil de la chute. Le sens (gauche/droite) est
-  // deduit de la position x de la fontaine par rapport au centre. Utilise
-  // le Web Animations API (plutot que @keyframes CSS statique) car la
-  // position du pic et le debut du fondu doivent varier avec SETTINGS.
+  // Piece jaillissant d'une fontaine (fountain = {x, y, arcHeightScale,
+  // arcWidthScale} en % dans .chest-wrap), trajectoire parabolique resserree
+  // pres du coffre et qui s'elargit vers le bas : peakX (montee, faible
+  // variance) reste proche de 0, flyX (chute, forte variance 70-240px de
+  // base, mis a l'echelle par arcWidthScale) fixe l'ecart final - c'est cet
+  // ecart tire au hasard par piece qui cree l'evasement du jet au fil de la
+  // chute. arcHeightScale met a l'echelle la hauteur de montee. Les deux
+  // sont individuels par fontaine (reglables dans chest-control.html). Le
+  // sens (gauche/droite) est deduit de la position x de la fontaine par
+  // rapport au centre. Utilise le Web Animations API (plutot que @keyframes
+  // CSS statique) car la position du pic et le debut du fondu doivent
+  // varier avec SETTINGS.
   function spawnFountainCoin(fountain){
     const dir = fountain.x < 50 ? -1 : 1;
     const frames = manifest.coinSpinFrames;
@@ -955,9 +966,11 @@
     el.style.width = size + 'px';
     el.style.height = size + 'px';
 
-    const peakSpread = 8 + Math.random() * 20;      // 8-28px : resserre pres du coffre
-    const peakHeight = (16 + Math.random() * 30) * SETTINGS.coinArcHeightScale; // montee avant la chute
-    const spread = 70 + Math.random() * 170;        // 70-240px : evase vers le bas
+    const arcHeightScale = fountain.arcHeightScale ?? 1;
+    const arcWidthScale = fountain.arcWidthScale ?? 1;
+    const peakSpread = (8 + Math.random() * 20) * arcWidthScale;   // resserre pres du coffre
+    const peakHeight = (16 + Math.random() * 30) * arcHeightScale; // montee avant la chute
+    const spread = (70 + Math.random() * 170) * arcWidthScale;     // evase vers le bas
     const fallDistance = 220 + Math.random() * 180;  // 220-400px de chute
     const baseDuration = 750 + Math.random() * 400;  // 750-1150ms de vol de base
     const duration = Math.max(150, baseDuration / SETTINGS.coinSpeedScale);

@@ -170,9 +170,6 @@ create table if not exists chest_settings (
   -- Part (%) du vol pendant laquelle la piece reste a l'opacite max avant
   -- de commencer a s'estomper (le reste du vol, jusqu'a 100%, est le fondu).
   coin_visible_percent                integer not null default 45 check (coin_visible_percent between 0 and 100),
-  -- Hauteur de la montee parabolique avant la chute, en % de la hauteur
-  -- par defaut (100% = comportement d'origine, 0% = tombe direct sans arc).
-  coin_arc_height_percent             integer not null default 100 check (coin_arc_height_percent between 0 and 300),
   -- Vitesse de vol des pieces (100% = duree par defaut, plus haut = plus rapide).
   coin_speed_percent                  integer not null default 100 check (coin_speed_percent between 10 and 300),
   -- Variation aleatoire de taille d'une piece a l'autre, en % de la taille de base.
@@ -185,14 +182,25 @@ create table if not exists chest_settings (
   -- fontaines possibles - seules les `coin_fountain_count` premieres sont
   -- actives. Par defaut : 1 et 2 de chaque cote du coffre (comportement
   -- d'origine), 3 et 4 au meme endroit tant qu'elles ne sont pas activees.
+  -- Hauteur/largeur de la montee parabolique avant la chute, individuelles
+  -- par fontaine, en % du comportement par defaut (100% = defaut, 0% =
+  -- tombe direct sans arc dans cette direction).
   fountain1_x_percent                 integer not null default 6  check (fountain1_x_percent between 0 and 100),
   fountain1_y_percent                 integer not null default 62 check (fountain1_y_percent between 0 and 100),
+  fountain1_arc_height_percent        integer not null default 100 check (fountain1_arc_height_percent between 0 and 300),
+  fountain1_arc_width_percent         integer not null default 100 check (fountain1_arc_width_percent between 0 and 300),
   fountain2_x_percent                 integer not null default 94 check (fountain2_x_percent between 0 and 100),
   fountain2_y_percent                 integer not null default 62 check (fountain2_y_percent between 0 and 100),
+  fountain2_arc_height_percent        integer not null default 100 check (fountain2_arc_height_percent between 0 and 300),
+  fountain2_arc_width_percent         integer not null default 100 check (fountain2_arc_width_percent between 0 and 300),
   fountain3_x_percent                 integer not null default 6  check (fountain3_x_percent between 0 and 100),
   fountain3_y_percent                 integer not null default 62 check (fountain3_y_percent between 0 and 100),
+  fountain3_arc_height_percent        integer not null default 100 check (fountain3_arc_height_percent between 0 and 300),
+  fountain3_arc_width_percent         integer not null default 100 check (fountain3_arc_width_percent between 0 and 300),
   fountain4_x_percent                 integer not null default 94 check (fountain4_x_percent between 0 and 100),
   fountain4_y_percent                 integer not null default 62 check (fountain4_y_percent between 0 and 100),
+  fountain4_arc_height_percent        integer not null default 100 check (fountain4_arc_height_percent between 0 and 300),
+  fountain4_arc_width_percent         integer not null default 100 check (fountain4_arc_width_percent between 0 and 300),
 
   updated_at                          timestamptz not null default now()
 );
@@ -237,7 +245,6 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- chest_settings sans les colonnes des fontaines a pieces :
 -- alter table chest_settings add column if not exists coin_opacity_percent integer not null default 90 check (coin_opacity_percent between 0 and 100);
 -- alter table chest_settings add column if not exists coin_visible_percent integer not null default 45 check (coin_visible_percent between 0 and 100);
--- alter table chest_settings add column if not exists coin_arc_height_percent integer not null default 100 check (coin_arc_height_percent between 0 and 300);
 -- alter table chest_settings add column if not exists coin_speed_percent integer not null default 100 check (coin_speed_percent between 10 and 300);
 -- alter table chest_settings add column if not exists coin_size_variation_percent integer not null default 40 check (coin_size_variation_percent between 0 and 100);
 -- alter table chest_settings add column if not exists coin_sprite_speed_percent integer not null default 100 check (coin_sprite_speed_percent between 10 and 300);
@@ -250,6 +257,28 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- alter table chest_settings add column if not exists fountain3_y_percent integer not null default 62 check (fountain3_y_percent between 0 and 100);
 -- alter table chest_settings add column if not exists fountain4_x_percent integer not null default 94 check (fountain4_x_percent between 0 and 100);
 -- alter table chest_settings add column if not exists fountain4_y_percent integer not null default 62 check (fountain4_y_percent between 0 and 100);
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
+-- chest_settings avec l'ancienne colonne unique coin_arc_height_percent
+-- (hauteur de parabole commune aux 4 fontaines) : ajoute les 8 nouvelles
+-- colonnes individuelles hauteur/largeur (copie l'ancienne valeur commune
+-- comme point de depart pour chaque fontaine, largeur au defaut 100%),
+-- puis retire l'ancienne colonne.
+-- alter table chest_settings add column if not exists fountain1_arc_height_percent integer not null default 100 check (fountain1_arc_height_percent between 0 and 300);
+-- alter table chest_settings add column if not exists fountain1_arc_width_percent integer not null default 100 check (fountain1_arc_width_percent between 0 and 300);
+-- alter table chest_settings add column if not exists fountain2_arc_height_percent integer not null default 100 check (fountain2_arc_height_percent between 0 and 300);
+-- alter table chest_settings add column if not exists fountain2_arc_width_percent integer not null default 100 check (fountain2_arc_width_percent between 0 and 300);
+-- alter table chest_settings add column if not exists fountain3_arc_height_percent integer not null default 100 check (fountain3_arc_height_percent between 0 and 300);
+-- alter table chest_settings add column if not exists fountain3_arc_width_percent integer not null default 100 check (fountain3_arc_width_percent between 0 and 300);
+-- alter table chest_settings add column if not exists fountain4_arc_height_percent integer not null default 100 check (fountain4_arc_height_percent between 0 and 300);
+-- alter table chest_settings add column if not exists fountain4_arc_width_percent integer not null default 100 check (fountain4_arc_width_percent between 0 and 300);
+-- update chest_settings set
+--   fountain1_arc_height_percent = coin_arc_height_percent,
+--   fountain2_arc_height_percent = coin_arc_height_percent,
+--   fountain3_arc_height_percent = coin_arc_height_percent,
+--   fountain4_arc_height_percent = coin_arc_height_percent
+-- where id = 1;
+-- alter table chest_settings drop column if exists coin_arc_height_percent;
 
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings sans les colonnes ray_offset_x_percent/ray_offset_y_percent :
