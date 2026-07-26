@@ -227,20 +227,60 @@
 
     <hr class="settings-divider">
 
-    <p class="hint">Decalage des 3 rayons lumineux (ils gardent leur ecartement entre eux, seule leur position d'ensemble bouge). Meme principe : applique immediatement, regle a l'oeil avec <a href="chest-overlay.html?debug=1" target="_blank" style="color:inherit;">chest-overlay.html?debug=1</a> ouvert a cote.</p>
+    <p class="hint">Decalage individuel de chacun des 3 rayons lumineux - un onglet par rayon. Applique immediatement, meme coffre deja affiche : regle a l'oeil avec <a href="chest-overlay.html?debug=1" target="_blank" style="color:inherit;">chest-overlay.html?debug=1</a> ouvert a cote.</p>
 
-    <div class="setting-row">
-      <label for="setting-ray-offset-x">Decalage rayons horizontal</label>
-      <div class="setting-input">
-        <input type="range" id="setting-ray-offset-x" min="-100" max="100" step="1">
-        <span class="range-value" id="setting-ray-offset-x-value">0%</span>
+    <div class="tier-tabs" id="ray-tabs">
+      <button class="tier-tab-btn" data-ray="1">Rayon 1</button>
+      <button class="tier-tab-btn" data-ray="2">Rayon 2</button>
+      <button class="tier-tab-btn" data-ray="3">Rayon 3</button>
+    </div>
+
+    <div class="tier-panel" data-ray-panel="1">
+      <div class="setting-row">
+        <label for="setting-ray1-offset-x">Decalage horizontal</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray1-offset-x" min="-100" max="100" step="1">
+          <span class="range-value" id="setting-ray1-offset-x-value">0%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-ray1-offset-y">Decalage vertical</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray1-offset-y" min="-100" max="100" step="1">
+          <span class="range-value" id="setting-ray1-offset-y-value">0%</span>
+        </div>
       </div>
     </div>
-    <div class="setting-row">
-      <label for="setting-ray-offset-y">Decalage rayons vertical</label>
-      <div class="setting-input">
-        <input type="range" id="setting-ray-offset-y" min="-100" max="100" step="1">
-        <span class="range-value" id="setting-ray-offset-y-value">0%</span>
+    <div class="tier-panel" data-ray-panel="2">
+      <div class="setting-row">
+        <label for="setting-ray2-offset-x">Decalage horizontal</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray2-offset-x" min="-100" max="100" step="1">
+          <span class="range-value" id="setting-ray2-offset-x-value">0%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-ray2-offset-y">Decalage vertical</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray2-offset-y" min="-100" max="100" step="1">
+          <span class="range-value" id="setting-ray2-offset-y-value">0%</span>
+        </div>
+      </div>
+    </div>
+    <div class="tier-panel" data-ray-panel="3">
+      <div class="setting-row">
+        <label for="setting-ray3-offset-x">Decalage horizontal</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray3-offset-x" min="-100" max="100" step="1">
+          <span class="range-value" id="setting-ray3-offset-x-value">0%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-ray3-offset-y">Decalage vertical</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray3-offset-y" min="-100" max="100" step="1">
+          <span class="range-value" id="setting-ray3-offset-y-value">0%</span>
+        </div>
       </div>
     </div>
 
@@ -348,12 +388,9 @@
   const settingOriginXValue = document.getElementById('setting-origin-x-value');
   const settingOriginYInput = document.getElementById('setting-origin-y');
   const settingOriginYValue = document.getElementById('setting-origin-y-value');
-  const settingRayOffsetXInput = document.getElementById('setting-ray-offset-x');
-  const settingRayOffsetXValue = document.getElementById('setting-ray-offset-x-value');
-  const settingRayOffsetYInput = document.getElementById('setting-ray-offset-y');
-  const settingRayOffsetYValue = document.getElementById('setting-ray-offset-y-value');
   const settingsSaveBtn = document.getElementById('settings-save-btn');
   const tierTabsEl = document.getElementById('tier-tabs');
+  const rayTabsEl = document.getElementById('ray-tabs');
 
   const TIERS = ['commun', 'rare', 'epique'];
   const tierInputs = {};
@@ -361,6 +398,17 @@
     tierInputs[tier] = {
       openingOngoing: document.getElementById('setting-opening-ongoing-' + tier),
       ongoingEnding: document.getElementById('setting-ongoing-ending-' + tier),
+    };
+  });
+
+  const RAYS = [1, 2, 3];
+  const rayInputs = {};
+  RAYS.forEach((n) => {
+    rayInputs[n] = {
+      x: document.getElementById(`setting-ray${n}-offset-x`),
+      xValue: document.getElementById(`setting-ray${n}-offset-x-value`),
+      y: document.getElementById(`setting-ray${n}-offset-y`),
+      yValue: document.getElementById(`setting-ray${n}-offset-y-value`),
     };
   });
 
@@ -540,10 +588,14 @@
     settingOriginXValue.textContent = data.effect_origin_x_percent + '%';
     settingOriginYInput.value = data.effect_origin_y_percent;
     settingOriginYValue.textContent = data.effect_origin_y_percent + '%';
-    settingRayOffsetXInput.value = data.ray_offset_x_percent;
-    settingRayOffsetXValue.textContent = data.ray_offset_x_percent + '%';
-    settingRayOffsetYInput.value = data.ray_offset_y_percent;
-    settingRayOffsetYValue.textContent = data.ray_offset_y_percent + '%';
+    RAYS.forEach((n) => {
+      const x = data[`ray${n}_offset_x_percent`];
+      const y = data[`ray${n}_offset_y_percent`];
+      rayInputs[n].x.value = x;
+      rayInputs[n].xValue.textContent = x + '%';
+      rayInputs[n].y.value = y;
+      rayInputs[n].yValue.textContent = y + '%';
+    });
   }
 
   async function saveSettings(){
@@ -559,12 +611,14 @@
       volume_percent: Number(settingVolumeInput.value),
       effect_origin_x_percent: Number(settingOriginXInput.value),
       effect_origin_y_percent: Number(settingOriginYInput.value),
-      ray_offset_x_percent: Number(settingRayOffsetXInput.value),
-      ray_offset_y_percent: Number(settingRayOffsetYInput.value),
     };
     TIERS.forEach((tier) => {
       body['opening_ongoing_overlap_ms_' + tier] = Number(tierInputs[tier].openingOngoing.value);
       body['ongoing_ending_overlap_ms_' + tier] = Number(tierInputs[tier].ongoingEnding.value);
+    });
+    RAYS.forEach((n) => {
+      body[`ray${n}_offset_x_percent`] = Number(rayInputs[n].x.value);
+      body[`ray${n}_offset_y_percent`] = Number(rayInputs[n].y.value);
     });
 
     const { data, error } = await sb.functions.invoke('update-chest-settings', { body });
@@ -637,18 +691,20 @@
   settingOriginYInput.addEventListener('input', () => {
     settingOriginYValue.textContent = settingOriginYInput.value + '%';
   });
-  settingRayOffsetXInput.addEventListener('input', () => {
-    settingRayOffsetXValue.textContent = settingRayOffsetXInput.value + '%';
-  });
-  settingRayOffsetYInput.addEventListener('input', () => {
-    settingRayOffsetYValue.textContent = settingRayOffsetYInput.value + '%';
+  RAYS.forEach((n) => {
+    rayInputs[n].x.addEventListener('input', () => {
+      rayInputs[n].xValue.textContent = rayInputs[n].x.value + '%';
+    });
+    rayInputs[n].y.addEventListener('input', () => {
+      rayInputs[n].yValue.textContent = rayInputs[n].y.value + '%';
+    });
   });
 
   function showTier(tier){
     tierTabsEl.querySelectorAll('.tier-tab-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.tier === tier);
     });
-    document.querySelectorAll('.tier-panel').forEach((panel) => {
+    document.querySelectorAll('.tier-panel[data-tier-panel]').forEach((panel) => {
       panel.classList.toggle('active', panel.dataset.tierPanel === tier);
     });
   }
@@ -656,6 +712,19 @@
     btn.addEventListener('click', () => showTier(btn.dataset.tier));
   });
   showTier('commun');
+
+  function showRay(ray){
+    rayTabsEl.querySelectorAll('.tier-tab-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.ray === ray);
+    });
+    document.querySelectorAll('.tier-panel[data-ray-panel]').forEach((panel) => {
+      panel.classList.toggle('active', panel.dataset.rayPanel === ray);
+    });
+  }
+  rayTabsEl.querySelectorAll('.tier-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => showRay(btn.dataset.ray));
+  });
+  showRay('1');
 
   async function init(){
     let token = extractTokenFromHash();

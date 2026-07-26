@@ -86,13 +86,16 @@ Deno.serve(async (req) => {
   if (originY === null) return json({ error: 'effect_origin_y_percent invalide (0-100 attendu)' }, 400);
   update.effect_origin_y_percent = originY;
 
-  const rayOffsetX = toValidOffset(body?.ray_offset_x_percent);
-  if (rayOffsetX === null) return json({ error: 'ray_offset_x_percent invalide (-100 a 100 attendu)' }, 400);
-  update.ray_offset_x_percent = rayOffsetX;
-
-  const rayOffsetY = toValidOffset(body?.ray_offset_y_percent);
-  if (rayOffsetY === null) return json({ error: 'ray_offset_y_percent invalide (-100 a 100 attendu)' }, 400);
-  update.ray_offset_y_percent = rayOffsetY;
+  for (const ray of [1, 2, 3] as const) {
+    const xField = `ray${ray}_offset_x_percent`;
+    const yField = `ray${ray}_offset_y_percent`;
+    const x = toValidOffset(body?.[xField]);
+    if (x === null) return json({ error: `${xField} invalide (-100 a 100 attendu)` }, 400);
+    update[xField] = x;
+    const y = toValidOffset(body?.[yField]);
+    if (y === null) return json({ error: `${yField} invalide (-100 a 100 attendu)` }, 400);
+    update[yField] = y;
+  }
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const { data, error } = await sb

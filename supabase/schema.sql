@@ -145,12 +145,17 @@ create table if not exists chest_settings (
   -- direct, y compris pendant que le coffre est affiche.
   effect_origin_x_percent             integer not null default 50 check (effect_origin_x_percent between 0 and 100),
   effect_origin_y_percent             integer not null default 50 check (effect_origin_y_percent between 0 and 100),
-  -- Decalage (%, du conteneur du coffre) applique ensemble aux 3 rayons
-  -- lumineux (qui gardent leur ecartement relatif, cale sur les croquis
-  -- originaux) - pour corriger leur position sans toucher au code, en
-  -- regardant chest-overlay.html?debug=1 en direct pendant le reglage.
-  ray_offset_x_percent                integer not null default 0 check (ray_offset_x_percent between -100 and 100),
-  ray_offset_y_percent                integer not null default 0 check (ray_offset_y_percent between -100 and 100),
+  -- Decalage (%, du conteneur du coffre) applique individuellement a chacun
+  -- des 3 rayons lumineux (position de depart cale sur les croquis
+  -- originaux) - pour corriger leur position un par un sans toucher au
+  -- code, en regardant chest-overlay.html?debug=1 en direct pendant le
+  -- reglage.
+  ray1_offset_x_percent               integer not null default 0 check (ray1_offset_x_percent between -100 and 100),
+  ray1_offset_y_percent               integer not null default 0 check (ray1_offset_y_percent between -100 and 100),
+  ray2_offset_x_percent               integer not null default 0 check (ray2_offset_x_percent between -100 and 100),
+  ray2_offset_y_percent               integer not null default 0 check (ray2_offset_y_percent between -100 and 100),
+  ray3_offset_x_percent               integer not null default 0 check (ray3_offset_x_percent between -100 and 100),
+  ray3_offset_y_percent               integer not null default 0 check (ray3_offset_y_percent between -100 and 100),
   updated_at                          timestamptz not null default now()
 );
 
@@ -164,6 +169,25 @@ insert into chest_settings (id) values (1) on conflict (id) do nothing;
 -- chest_settings sans les colonnes effect_origin_x_percent/effect_origin_y_percent :
 -- alter table chest_settings add column if not exists effect_origin_x_percent integer not null default 50 check (effect_origin_x_percent between 0 and 100);
 -- alter table chest_settings add column if not exists effect_origin_y_percent integer not null default 50 check (effect_origin_y_percent between 0 and 100);
+
+-- MIGRATION - a lancer une seule fois si ton projet Supabase a deja les
+-- anciennes colonnes ray_offset_x_percent/ray_offset_y_percent (decalage
+-- unique pour les 3 rayons) : ajoute les 3 paires individuelles (copie
+-- l'ancien decalage commun comme point de depart pour chacune), puis retire
+-- les anciennes colonnes.
+-- alter table chest_settings add column if not exists ray1_offset_x_percent integer not null default 0 check (ray1_offset_x_percent between -100 and 100);
+-- alter table chest_settings add column if not exists ray1_offset_y_percent integer not null default 0 check (ray1_offset_y_percent between -100 and 100);
+-- alter table chest_settings add column if not exists ray2_offset_x_percent integer not null default 0 check (ray2_offset_x_percent between -100 and 100);
+-- alter table chest_settings add column if not exists ray2_offset_y_percent integer not null default 0 check (ray2_offset_y_percent between -100 and 100);
+-- alter table chest_settings add column if not exists ray3_offset_x_percent integer not null default 0 check (ray3_offset_x_percent between -100 and 100);
+-- alter table chest_settings add column if not exists ray3_offset_y_percent integer not null default 0 check (ray3_offset_y_percent between -100 and 100);
+-- update chest_settings set
+--   ray1_offset_x_percent = ray_offset_x_percent, ray1_offset_y_percent = ray_offset_y_percent,
+--   ray2_offset_x_percent = ray_offset_x_percent, ray2_offset_y_percent = ray_offset_y_percent,
+--   ray3_offset_x_percent = ray_offset_x_percent, ray3_offset_y_percent = ray_offset_y_percent
+-- where id = 1;
+-- alter table chest_settings drop column if exists ray_offset_x_percent;
+-- alter table chest_settings drop column if exists ray_offset_y_percent;
 
 -- MIGRATION - a lancer une seule fois si ton projet Supabase a deja
 -- chest_settings sans les colonnes ray_offset_x_percent/ray_offset_y_percent :

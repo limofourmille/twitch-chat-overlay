@@ -139,10 +139,10 @@
     pointer-events:none;
   }
   .chest-wrap.bursting .chest-ray{ animation: ray-pulse 1.4s ease-in-out infinite; }
-  /* Apex a (302,397)/700 - cf. light-ray-1.png. Decalage groupe reglable
-     depuis chest-control.html (--ray-offset-x/y, voir applySettings). */
+  /* Apex a (302,397)/700 - cf. light-ray-1.png. Decalage individuel reglable
+     depuis chest-control.html (--ray1-offset-x/y, voir applySettings). */
   .chest-ray-1{
-    left:calc(43.1% + var(--ray-offset-x, 0%)); top:calc(56.7% + var(--ray-offset-y, 0%));
+    left:calc(43.1% + var(--ray1-offset-x, 0%)); top:calc(56.7% + var(--ray1-offset-y, 0%));
     width:70vh; height:70vh;
     transform:translate(-50%, -100%);
     clip-path: polygon(48% 100%, 52% 100%, 72.4% 0%, 6.9% 0%);
@@ -150,7 +150,7 @@
   }
   /* Apex a (360,460)/700 - cf. light-ray-2.png. */
   .chest-ray-2{
-    left:calc(51.4% + var(--ray-offset-x, 0%)); top:calc(65.7% + var(--ray-offset-y, 0%));
+    left:calc(51.4% + var(--ray2-offset-x, 0%)); top:calc(65.7% + var(--ray2-offset-y, 0%));
     width:119vh; height:70vh;
     transform:translate(-50%, -100%);
     clip-path: polygon(48% 100%, 52% 100%, 92.5% 0%, 49.4% 0%);
@@ -159,7 +159,7 @@
   }
   /* Apex a (104,397)/700 - cf. light-ray-3.png. */
   .chest-ray-3{
-    left:calc(14.9% + var(--ray-offset-x, 0%)); top:calc(56.7% + var(--ray-offset-y, 0%));
+    left:calc(14.9% + var(--ray3-offset-x, 0%)); top:calc(56.7% + var(--ray3-offset-y, 0%));
     width:101.5vh; height:70vh;
     transform:translate(-50%, -100%);
     clip-path: polygon(48% 100%, 52% 100%, 93% 0%, 7% 0%);
@@ -445,14 +445,14 @@
     if(Number.isFinite(row.effect_origin_y_percent)){
       document.documentElement.style.setProperty('--fx-origin-y', row.effect_origin_y_percent + '%');
     }
-    // Decalage applique ensemble aux 3 rayons (voir .chest-ray-1/2/3), pour
-    // corriger leur position en direct sans toucher au code - meme principe
-    // que --fx-origin-x/y ci-dessus.
-    if(Number.isFinite(row.ray_offset_x_percent)){
-      document.documentElement.style.setProperty('--ray-offset-x', row.ray_offset_x_percent + '%');
-    }
-    if(Number.isFinite(row.ray_offset_y_percent)){
-      document.documentElement.style.setProperty('--ray-offset-y', row.ray_offset_y_percent + '%');
+    // Decalage individuel par rayon (voir .chest-ray-1/2/3), pour corriger
+    // leur position un par un en direct sans toucher au code - meme
+    // principe que --fx-origin-x/y ci-dessus.
+    for(const n of [1, 2, 3]){
+      const x = row[`ray${n}_offset_x_percent`];
+      const y = row[`ray${n}_offset_y_percent`];
+      if(Number.isFinite(x)) document.documentElement.style.setProperty(`--ray${n}-offset-x`, x + '%');
+      if(Number.isFinite(y)) document.documentElement.style.setProperty(`--ray${n}-offset-y`, y + '%');
     }
   }
 
