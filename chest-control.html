@@ -406,13 +406,6 @@
         </div>
       </div>
       <div class="setting-row">
-        <label for="setting-coin-arc">Courbe des paraboles</label>
-        <div class="setting-input">
-          <input type="range" id="setting-coin-arc" min="0" max="300" step="5">
-          <span class="range-value" id="setting-coin-arc-value">100%</span>
-        </div>
-      </div>
-      <div class="setting-row">
         <label for="setting-coin-speed">Vitesse des pieces</label>
         <div class="setting-input">
           <input type="range" id="setting-coin-speed" min="10" max="300" step="5">
@@ -468,6 +461,20 @@
             <span class="range-value" id="setting-fountain1-y-value">62%</span>
           </div>
         </div>
+        <div class="setting-row">
+          <label for="setting-fountain1-arc-height">Hauteur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain1-arc-height" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain1-arc-height-value">100%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain1-arc-width">Largeur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain1-arc-width" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain1-arc-width-value">100%</span>
+          </div>
+        </div>
       </div>
       <div class="tier-panel" data-fountain-panel="2">
         <div class="setting-row">
@@ -482,6 +489,20 @@
           <div class="setting-input">
             <input type="range" id="setting-fountain2-y" min="0" max="100" step="1">
             <span class="range-value" id="setting-fountain2-y-value">62%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain2-arc-height">Hauteur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain2-arc-height" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain2-arc-height-value">100%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain2-arc-width">Largeur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain2-arc-width" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain2-arc-width-value">100%</span>
           </div>
         </div>
       </div>
@@ -500,6 +521,20 @@
             <span class="range-value" id="setting-fountain3-y-value">62%</span>
           </div>
         </div>
+        <div class="setting-row">
+          <label for="setting-fountain3-arc-height">Hauteur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain3-arc-height" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain3-arc-height-value">100%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain3-arc-width">Largeur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain3-arc-width" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain3-arc-width-value">100%</span>
+          </div>
+        </div>
       </div>
       <div class="tier-panel" data-fountain-panel="4">
         <div class="setting-row">
@@ -514,6 +549,20 @@
           <div class="setting-input">
             <input type="range" id="setting-fountain4-y" min="0" max="100" step="1">
             <span class="range-value" id="setting-fountain4-y-value">62%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain4-arc-height">Hauteur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain4-arc-height" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain4-arc-height-value">100%</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label for="setting-fountain4-arc-width">Largeur des paraboles</label>
+          <div class="setting-input">
+            <input type="range" id="setting-fountain4-arc-width" min="0" max="300" step="5">
+            <span class="range-value" id="setting-fountain4-arc-width-value">100%</span>
           </div>
         </div>
       </div>
@@ -579,8 +628,6 @@
   const settingCoinOpacityValue = document.getElementById('setting-coin-opacity-value');
   const settingCoinVisibleInput = document.getElementById('setting-coin-visible');
   const settingCoinVisibleValue = document.getElementById('setting-coin-visible-value');
-  const settingCoinArcInput = document.getElementById('setting-coin-arc');
-  const settingCoinArcValue = document.getElementById('setting-coin-arc-value');
   const settingCoinSpeedInput = document.getElementById('setting-coin-speed');
   const settingCoinSpeedValue = document.getElementById('setting-coin-speed-value');
   const settingCoinSizeVariationInput = document.getElementById('setting-coin-size-variation');
@@ -620,6 +667,10 @@
       xValue: document.getElementById(`setting-fountain${n}-x-value`),
       y: document.getElementById(`setting-fountain${n}-y`),
       yValue: document.getElementById(`setting-fountain${n}-y-value`),
+      arcHeight: document.getElementById(`setting-fountain${n}-arc-height`),
+      arcHeightValue: document.getElementById(`setting-fountain${n}-arc-height-value`),
+      arcWidth: document.getElementById(`setting-fountain${n}-arc-width`),
+      arcWidthValue: document.getElementById(`setting-fountain${n}-arc-width-value`),
     };
   });
 
@@ -814,8 +865,6 @@
     settingCoinOpacityValue.textContent = data.coin_opacity_percent + '%';
     settingCoinVisibleInput.value = data.coin_visible_percent;
     settingCoinVisibleValue.textContent = data.coin_visible_percent + '%';
-    settingCoinArcInput.value = data.coin_arc_height_percent;
-    settingCoinArcValue.textContent = data.coin_arc_height_percent + '%';
     settingCoinSpeedInput.value = data.coin_speed_percent;
     settingCoinSpeedValue.textContent = data.coin_speed_percent + '%';
     settingCoinSizeVariationInput.value = data.coin_size_variation_percent;
@@ -827,10 +876,16 @@
     FOUNTAINS.forEach((n) => {
       const x = data[`fountain${n}_x_percent`];
       const y = data[`fountain${n}_y_percent`];
+      const arcHeight = data[`fountain${n}_arc_height_percent`];
+      const arcWidth = data[`fountain${n}_arc_width_percent`];
       fountainInputs[n].x.value = x;
       fountainInputs[n].xValue.textContent = x + '%';
       fountainInputs[n].y.value = y;
       fountainInputs[n].yValue.textContent = y + '%';
+      fountainInputs[n].arcHeight.value = arcHeight;
+      fountainInputs[n].arcHeightValue.textContent = arcHeight + '%';
+      fountainInputs[n].arcWidth.value = arcWidth;
+      fountainInputs[n].arcWidthValue.textContent = arcWidth + '%';
     });
   }
 
@@ -859,7 +914,6 @@
     });
     body.coin_opacity_percent = Number(settingCoinOpacityInput.value);
     body.coin_visible_percent = Number(settingCoinVisibleInput.value);
-    body.coin_arc_height_percent = Number(settingCoinArcInput.value);
     body.coin_speed_percent = Number(settingCoinSpeedInput.value);
     body.coin_size_variation_percent = Number(settingCoinSizeVariationInput.value);
     body.coin_sprite_speed_percent = Number(settingCoinSpriteSpeedInput.value);
@@ -867,6 +921,8 @@
     FOUNTAINS.forEach((n) => {
       body[`fountain${n}_x_percent`] = Number(fountainInputs[n].x.value);
       body[`fountain${n}_y_percent`] = Number(fountainInputs[n].y.value);
+      body[`fountain${n}_arc_height_percent`] = Number(fountainInputs[n].arcHeight.value);
+      body[`fountain${n}_arc_width_percent`] = Number(fountainInputs[n].arcWidth.value);
     });
 
     const { data, error } = await sb.functions.invoke('update-chest-settings', { body });
@@ -956,9 +1012,6 @@
   settingCoinVisibleInput.addEventListener('input', () => {
     settingCoinVisibleValue.textContent = settingCoinVisibleInput.value + '%';
   });
-  settingCoinArcInput.addEventListener('input', () => {
-    settingCoinArcValue.textContent = settingCoinArcInput.value + '%';
-  });
   settingCoinSpeedInput.addEventListener('input', () => {
     settingCoinSpeedValue.textContent = settingCoinSpeedInput.value + '%';
   });
@@ -977,6 +1030,12 @@
     });
     fountainInputs[n].y.addEventListener('input', () => {
       fountainInputs[n].yValue.textContent = fountainInputs[n].y.value + '%';
+    });
+    fountainInputs[n].arcHeight.addEventListener('input', () => {
+      fountainInputs[n].arcHeightValue.textContent = fountainInputs[n].arcHeight.value + '%';
+    });
+    fountainInputs[n].arcWidth.addEventListener('input', () => {
+      fountainInputs[n].arcWidthValue.textContent = fountainInputs[n].arcWidth.value + '%';
     });
   });
 

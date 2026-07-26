@@ -115,7 +115,6 @@ Deno.serve(async (req) => {
   const COIN_RANGE_FIELDS: [string, number, number][] = [
     ['coin_opacity_percent', 0, 100],
     ['coin_visible_percent', 0, 100],
-    ['coin_arc_height_percent', 0, 300],
     ['coin_speed_percent', 10, 300],
     ['coin_size_variation_percent', 0, 100],
     ['coin_sprite_speed_percent', 10, 300],
@@ -135,6 +134,15 @@ Deno.serve(async (req) => {
     const y = toValidPercent(body?.[yField]);
     if (y === null) return json({ error: `${yField} invalide (0-100 attendu)` }, 400);
     update[yField] = y;
+
+    const heightField = `fountain${fountain}_arc_height_percent`;
+    const widthField = `fountain${fountain}_arc_width_percent`;
+    const height = toValidRange(body?.[heightField], 0, 300);
+    if (height === null) return json({ error: `${heightField} invalide (0-300 attendu)` }, 400);
+    update[heightField] = height;
+    const width = toValidRange(body?.[widthField], 0, 300);
+    if (width === null) return json({ error: `${widthField} invalide (0-300 attendu)` }, 400);
+    update[widthField] = width;
   }
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
