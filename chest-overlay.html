@@ -99,6 +99,21 @@
     100%{ width:420px; height:420px; opacity:0; }
   }
 
+  /* Flash blanc plein ecran a l'instant precis de l'ouverture (frame 4 +
+     classe .bursting, voir la fin de playOpening) - au-dessus de tout le
+     reste (dernier enfant de .stage). */
+  .open-flash{
+    position:absolute; inset:0;
+    background:#fff;
+    opacity:0;
+    pointer-events:none;
+  }
+  .open-flash.flash{ animation: open-flash-anim 0.4s ease-out; }
+  @keyframes open-flash-anim{
+    0%{ opacity:0.95; }
+    100%{ opacity:0; }
+  }
+
   /* ---------------------------- Feu d'artifice (flipbook 8 frames) ---------------------------- */
   .firework{
     position:absolute; left:50%; top:38%;
@@ -345,6 +360,8 @@
   </div>
 
   <video class="reward-video" id="reward-video" muted playsinline></video>
+
+  <div class="open-flash" id="open-flash"></div>
 </div>
 
 <script src="assets/chest-manifest.js"></script>
@@ -383,6 +400,7 @@
   const chestWrap = document.getElementById('chest-wrap');
   const chestSprite = document.getElementById('chest-sprite');
   const impactFlash = document.getElementById('impact-flash');
+  const openFlash = document.getElementById('open-flash');
   const firework = document.getElementById('firework');
   const burstWrap = document.getElementById('burst-wrap');
   const chestRayEls = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
@@ -833,6 +851,7 @@
 
     chestSprite.src = manifest.chestFrames[3]; // grand ouvert
     chestWrap.classList.add('bursting'); // flash radial (voir .burst), en parallele de la suite
+    triggerOpenFlash();
   }
 
   // Alterne l'affichage entre les 3 rayons (un seul visible a la fois, en
@@ -1010,6 +1029,14 @@
     });
   }
 
+  // Flash blanc plein ecran a l'instant precis de l'ouverture (voir
+  // .open-flash) - relance l'animation CSS meme si elle vient de jouer.
+  function triggerOpenFlash(){
+    openFlash.classList.remove('flash');
+    void openFlash.offsetWidth;
+    openFlash.classList.add('flash');
+  }
+
   // Flipbook 8 frames joue une fois en fond au moment de la revelation.
   function playFirework(){
     const frames = manifest.fireworkFrames;
@@ -1157,6 +1184,7 @@
       rewardVideo.classList.remove('visible');
       startRayCycle(); // meme comportement que le vrai playOngoing
       startCoinFountain();
+      triggerOpenFlash();
     },
     reveal(){
       forceStopEverything();
