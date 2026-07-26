@@ -114,6 +114,20 @@
     100%{ opacity:0; }
   }
 
+  /* Fond qui blanchit progressivement pendant ongoing-<palier>.mp3 (voir
+     startOngoingFade) - premier enfant de .stage, donc derriere le coffre/
+     les rayons/la foule : sert uniquement a augmenter le contraste pour que
+     le trait noir des avatars (antennes comprises) redevienne visible sur
+     un fond qui etait jusque-la sombre. Revient a 0 au debut de la
+     revelation (voir resetOngoingFade dans playEnding). */
+  .ongoing-fade{
+    position:absolute; inset:0;
+    background:#fff;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity linear;
+  }
+
   /* ---------------------------- Feu d'artifice (flipbook 8 frames) ---------------------------- */
   .firework{
     position:absolute; left:50%; top:38%;
@@ -221,6 +235,45 @@
     object-fit:contain;
     opacity:0;
     pointer-events:none;
+  }
+
+  /* Foule d'avatars dansants - palier epique uniquement. Une piece de
+     fontaine a 20% de chances de jaillir sous forme d'avatar (voir
+     spawnFountainCoin) ; a la fin de son vol, un avatar permanent est
+     ajoute ici (spawnCrowdAvatar), devant le coffre. Toutes les instances
+     (celles en vol ET celles de la foule) partagent la meme horloge de
+     frame (registerDanceElement) pour danser en synchro. */
+  .avatar-crowd{
+    position:absolute; inset:0;
+    pointer-events:none;
+  }
+  .avatar-crowd-member{
+    position:absolute;
+    object-fit:contain;
+    transform:translate(-50%, -50%);
+    pointer-events:none;
+  }
+  /* A la revelation (voir triggerCrowdCelebration) : un saut synchronise
+     (meme animation, meme instant pour tous) suivi d'un sautillement
+     continu mais asynchrone (duree/delai randomises par avatar via
+     --hop-duration/--hop-delay) jusqu'a la fermeture du coffre. */
+  .avatar-crowd-member.jumping{ animation: avatar-jump 0.5s ease-out 1; }
+  @keyframes avatar-jump{
+    0%{ transform:translate(-50%, -50%) translateY(0); }
+    35%{ transform:translate(-50%, -50%) translateY(-26px); }
+    60%{ transform:translate(-50%, -50%) translateY(0); }
+    100%{ transform:translate(-50%, -50%) translateY(0); }
+  }
+  .avatar-crowd-member.hopping{
+    animation-name: avatar-hop;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-duration: var(--hop-duration, 0.6s);
+    animation-delay: var(--hop-delay, 0s);
+  }
+  @keyframes avatar-hop{
+    0%, 100%{ transform:translate(-50%, -50%) translateY(0); }
+    50%{ transform:translate(-50%, -50%) translateY(-10px); }
   }
 
   .result-icon{
@@ -336,6 +389,8 @@
 </div>
 
 <div class="stage">
+  <div class="ongoing-fade" id="ongoing-fade"></div>
+
   <div class="chest-wrap" id="chest-wrap">
     <div class="impact-flash" id="impact-flash"></div>
     <div class="burst"></div>
@@ -343,6 +398,7 @@
     <div class="chest-ray chest-ray-1" id="chest-ray-1"></div>
     <div class="chest-ray chest-ray-2" id="chest-ray-2"></div>
     <div class="chest-ray chest-ray-3" id="chest-ray-3"></div>
+    <div class="avatar-crowd" id="avatar-crowd"></div>
   </div>
 
   <img class="firework" id="firework" alt="">
@@ -401,9 +457,11 @@
   const chestSprite = document.getElementById('chest-sprite');
   const impactFlash = document.getElementById('impact-flash');
   const openFlash = document.getElementById('open-flash');
+  const ongoingFade = document.getElementById('ongoing-fade');
   const firework = document.getElementById('firework');
   const burstWrap = document.getElementById('burst-wrap');
   const chestRayEls = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
+  const avatarCrowdEl = document.getElementById('avatar-crowd');
   const resultIcon = document.getElementById('result-icon');
   const rewardCard = document.getElementById('reward-card');
   const rewardCardIcon = document.getElementById('reward-card-icon');
@@ -799,6 +857,8 @@
     chestSprite.src = manifest.chestFrames[0];
     chestWrap.classList.remove('bursting', 'idle-bob');
     chestWrap.classList.add('visible');
+    resetAvatarCrowd(); // repart d'une foule vide pour ce nouveau tirage
+    resetOngoingFade(true);
 
     // Precharge les 3 pistes tout de suite (pendant que la boucle d'attente
     // termine son tour) : chacune a ainsi toute la duree necessaire pour
@@ -880,15 +940,26 @@
     return stopRayCycleFn;
   }
 
+  // Fontaines actives selon le palier : follow ne montre que les 2
+  // premieres (comportement d'origine), sub T1/T2/T3 debloquent les 4 -
+  // dans la limite du nombre configure manuellement (SETTINGS.coinFountains,
+  // deja tronque a coin_fountain_count par applySettings).
+  function activeFountainsForReward(reward){
+    const count = reward === 'commun'
+      ? Math.min(2, SETTINGS.coinFountains.length)
+      : SETTINGS.coinFountains.length;
+    return SETTINGS.coinFountains.slice(0, count);
+  }
+
   // Fontaine a pieces continue des deux cotes du coffre (voir spawnFountainCoin
   // pour la trajectoire). stopCoinFountainFn est garde au niveau module pour
   // que forceStopEverything() puisse couper une fontaine laissee en cours.
   let stopCoinFountainFn = null;
-  function startCoinFountain(intervalMs = 90){
+  function startCoinFountain(reward, intervalMs = 90){
     const timer = setInterval(() => {
-      SETTINGS.coinFountains.forEach((fountain) => {
-        spawnFountainCoin(fountain);
-        spawnFountainCoin(fountain);
+      activeFountainsForReward(reward).forEach((fountain) => {
+        spawnFountainCoin(fountain, reward);
+        spawnFountainCoin(fountain, reward);
       });
     }, intervalMs);
     stopCoinFountainFn = () => {
@@ -902,8 +973,9 @@
   async function playOngoing(reward, preloadedAudio){
     burstWrap.classList.add('visible');
     const stopRayCycle = startRayCycle();
-    const stopCoinFountain = startCoinFountain();
-    const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
+    const stopCoinFountain = startCoinFountain(reward);
+    const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
+    startOngoingFade(audio);
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
@@ -916,6 +988,8 @@
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
   async function playEnding(ev, reward, preloadedAudio){
     const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
+    resetOngoingFade();
+    triggerCrowdCelebration();
 
     playFirework();
     resultIcon.classList.remove('rising');
@@ -956,21 +1030,135 @@
     el.addEventListener('animationend', () => el.remove());
   }
 
-  // Piece jaillissant d'une fontaine (fountain = {x, y, arcHeightScale,
-  // arcWidthScale} en % dans .chest-wrap), trajectoire parabolique resserree
-  // pres du coffre et qui s'elargit vers le bas : peakX (montee, faible
-  // variance) reste proche de 0, flyX (chute, forte variance 70-240px de
-  // base, mis a l'echelle par arcWidthScale) fixe l'ecart final - c'est cet
-  // ecart tire au hasard par piece qui cree l'evasement du jet au fil de la
-  // chute. arcHeightScale met a l'echelle la hauteur de montee. Les deux
-  // sont individuels par fontaine (reglables dans chest-control.html). Le
-  // sens (gauche/droite) est deduit de la position x de la fontaine par
-  // rapport au centre. Utilise le Web Animations API (plutot que @keyframes
-  // CSS statique) car la position du pic et le debut du fondu doivent
-  // varier avec SETTINGS.
-  function spawnFountainCoin(fountain){
+  // Horloge de danse partagee : toutes les instances d'avatar (particule de
+  // fontaine ET membres de la foule) affichent le meme frame au meme
+  // instant, quel que soit leur moment de creation - c'est ce qui les
+  // garde synchronises entre eux.
+  const DANCE_FRAME_MS = 90;
+  let danceFrameIndex = 0;
+  let danceTimer = null;
+  const danceElements = new Set();
+
+  function registerDanceElement(el){
+    danceElements.add(el);
+    el.src = manifest.avatarDanceFrames[danceFrameIndex];
+    if(!danceTimer){
+      danceTimer = setInterval(() => {
+        danceFrameIndex = (danceFrameIndex + 1) % manifest.avatarDanceFrames.length;
+        const src = manifest.avatarDanceFrames[danceFrameIndex];
+        danceElements.forEach((danceEl) => { danceEl.src = src; });
+      }, DANCE_FRAME_MS);
+    }
+  }
+
+  function unregisterDanceElement(el){
+    danceElements.delete(el);
+    if(danceElements.size === 0 && danceTimer){
+      clearInterval(danceTimer);
+      danceTimer = null;
+    }
+  }
+
+  // Ajoute un avatar permanent devant le coffre (foule qui s'accumule au
+  // fil du jaillissement, palier epique). Placement aleatoire "naturel"
+  // plutot qu'une grille : chaque avatar tire une profondeur (0 = fond,
+  // 1 = premier plan) qui pilote a la fois sa position verticale, sa
+  // taille (plus petit/loin en arriere, plus grand/proche devant) et son
+  // z-index. Le z-index explicite est ce qui evite l'effet "photo de
+  // famille casse" - sans lui, un avatar arrive plus tard mais assigne
+  // plus en arriere se serait quand meme affiche AU-DESSUS de ceux du
+  // premier plan (ordre du DOM), les faisant paraitre superposes n'importe
+  // comment au lieu d'un vrai devant/derriere.
+  const CROWD_SPREAD_PX = 200;
+  const CROWD_BACK_TOP_PERCENT = 82;
+  const CROWD_FRONT_TOP_PERCENT = 108;
+  const CROWD_MIN_SIZE = 46;
+  const CROWD_MAX_SIZE = 92;
+  function spawnCrowdAvatar(){
+    const el = document.createElement('img');
+    el.className = 'avatar-crowd-member';
+    const depth = Math.random(); // 0 = fond, 1 = premier plan
+    const top = CROWD_BACK_TOP_PERCENT + depth * (CROWD_FRONT_TOP_PERCENT - CROWD_BACK_TOP_PERCENT);
+    const baseSize = CROWD_MIN_SIZE + depth * (CROWD_MAX_SIZE - CROWD_MIN_SIZE);
+    const size = Math.max(20, baseSize + (Math.random() * 14 - 7)); // variation individuelle en plus de la profondeur
+    const xOffset = (Math.random() * 2 - 1) * CROWD_SPREAD_PX;
+    el.style.left = `calc(50% + ${xOffset}px)`;
+    el.style.top = top + '%';
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    el.style.zIndex = String(Math.round(top * 10)); // devant (top eleve) au-dessus, arriere en-dessous
+    avatarCrowdEl.appendChild(el);
+    registerDanceElement(el);
+  }
+
+  function resetAvatarCrowd(){
+    avatarCrowdEl.querySelectorAll('.avatar-crowd-member').forEach((el) => {
+      unregisterDanceElement(el);
+      el.remove();
+    });
+    crowdCount = 0;
+  }
+
+  // Au moment de la revelation : chaque avatar quitte l'horloge de danse
+  // partagee et fige sur un sprite tire au hasard, puis tous sautent
+  // ensemble (meme animation .jumping declenchee au meme instant). Une
+  // fois le saut termine, bascule sur un sautillement continu mais
+  // asynchrone (duree/delai randomises par avatar) qui dure jusqu'a la
+  // fermeture du coffre (l'element est simplement retire par
+  // resetAvatarCrowd() au tirage suivant, pas besoin d'arreter quoi que ce
+  // soit explicitement).
+  const CROWD_JUMP_MS = 500;
+  function triggerCrowdCelebration(){
+    const members = [...avatarCrowdEl.querySelectorAll('.avatar-crowd-member')];
+    if(members.length === 0) return;
+    const frames = manifest.avatarDanceFrames;
+    members.forEach((el) => {
+      unregisterDanceElement(el);
+      el.src = frames[Math.floor(Math.random() * frames.length)];
+      el.classList.add('jumping');
+    });
+    setTimeout(() => {
+      members.forEach((el) => {
+        el.classList.remove('jumping');
+        el.style.setProperty('--hop-duration', (0.45 + Math.random() * 0.35) + 's');
+        el.style.setProperty('--hop-delay', (Math.random() * 0.5) + 's');
+        el.classList.add('hopping');
+      });
+    }, CROWD_JUMP_MS);
+  }
+
+  // Chance qu'une piece de fontaine jaillisse sous forme d'avatar dansant
+  // plutot qu'une piece normale - reservee au palier epique (voir
+  // spawnFountainCoin). A la fin de son vol, un avatar rejoint la foule
+  // devant le coffre (spawnCrowdAvatar) au lieu de simplement disparaitre.
+  // Plafonnee a MAX_CROWD_SIZE : au-dela, la fontaine redevient des pieces
+  // normales - sans ca, le debit tres eleve des fontaines (voir "beaucoup
+  // plus de pieces") fait grossir la foule en un mur qui finit par recouvrir
+  // la carte de recompense en quelques secondes. crowdCount incremente des
+  // la decision (pas seulement a l'atterrissage) pour que la limite tienne
+  // meme quand plusieurs avatars sont tires coup sur coup avant que le
+  // premier n'ait fini son vol.
+  const AVATAR_CHANCE = 0.2;
+  const MAX_CROWD_SIZE = 40;
+  let crowdCount = 0;
+
+  // Piece (ou avatar, voir AVATAR_CHANCE) jaillissant d'une fontaine
+  // (fountain = {x, y, arcHeightScale, arcWidthScale} en % dans .chest-wrap),
+  // trajectoire parabolique resserree pres du coffre et qui s'elargit vers
+  // le bas : peakX (montee, faible variance) reste proche de 0, flyX
+  // (chute, forte variance 70-240px de base, mis a l'echelle par
+  // arcWidthScale) fixe l'ecart final - c'est cet ecart tire au hasard par
+  // piece qui cree l'evasement du jet au fil de la chute. arcHeightScale
+  // met a l'echelle la hauteur de montee. Les deux sont individuels par
+  // fontaine (reglables dans chest-control.html). Le sens (gauche/droite)
+  // est deduit de la position x de la fontaine par rapport au centre.
+  // Utilise le Web Animations API (plutot que @keyframes CSS statique) car
+  // la position du pic et le debut du fondu doivent varier avec SETTINGS.
+  function spawnFountainCoin(fountain, reward){
     const dir = fountain.x < 50 ? -1 : 1;
-    const frames = manifest.coinSpinFrames;
+    const isAvatar = reward === 'epique' && crowdCount < MAX_CROWD_SIZE && Math.random() < AVATAR_CHANCE;
+    if(isAvatar) crowdCount++; // reserve tout de suite, voir MAX_CROWD_SIZE
+    const frames = isAvatar ? manifest.avatarDanceFrames : manifest.coinSpinFrames;
     let frameIdx = Math.floor(Math.random() * frames.length);
 
     const el = document.createElement('img');
@@ -1017,14 +1205,24 @@
 
     const anim = el.animate(keyframeList, { duration, fill: 'forwards' });
 
-    const frameIntervalMs = Math.max(15, 70 / SETTINGS.coinSpriteSpeedScale);
-    const frameTimer = setInterval(() => {
-      frameIdx = (frameIdx + 1) % frames.length;
-      el.src = frames[frameIdx];
-    }, frameIntervalMs);
+    let frameTimer = null;
+    if(isAvatar){
+      registerDanceElement(el);
+    }else{
+      const frameIntervalMs = Math.max(15, 70 / SETTINGS.coinSpriteSpeedScale);
+      frameTimer = setInterval(() => {
+        frameIdx = (frameIdx + 1) % frames.length;
+        el.src = frames[frameIdx];
+      }, frameIntervalMs);
+    }
 
     anim.addEventListener('finish', () => {
-      clearInterval(frameTimer);
+      if(isAvatar){
+        unregisterDanceElement(el);
+        spawnCrowdAvatar();
+      }else{
+        clearInterval(frameTimer);
+      }
       el.remove();
     });
   }
@@ -1035,6 +1233,33 @@
     openFlash.classList.remove('flash');
     void openFlash.offsetWidth;
     openFlash.classList.add('flash');
+  }
+
+  // Fait blanchir progressivement le fond pendant toute la duree reelle de
+  // `audio` (ongoing-<palier>.mp3), pour faire ressortir le trait noir des
+  // avatars (antennes comprises) qui se voyait mal sur fond sombre. Cible
+  // 0.85 plutot que 1 pour garder une transition douce sans passer au
+  // blanc plein ecran.
+  const ONGOING_FADE_TARGET = 0.85;
+  function startOngoingFade(audio){
+    const apply = () => {
+      const ms = (isFinite(audio.duration) && audio.duration > 0) ? audio.duration * 1000 : 8000;
+      ongoingFade.style.transitionDuration = ms + 'ms';
+      ongoingFade.style.opacity = String(ONGOING_FADE_TARGET);
+    };
+    if(audio.readyState >= HTMLMediaElement.HAVE_METADATA && isFinite(audio.duration) && audio.duration > 0){
+      apply();
+    }else{
+      audio.addEventListener('loadedmetadata', apply, { once: true });
+    }
+  }
+
+  // Revient a un fond neutre pour la revelation - appelee au debut de
+  // playEnding, et en dur (sans transition) a chaque remise a zero
+  // (nouveau tirage, forceStopEverything).
+  function resetOngoingFade(instant){
+    ongoingFade.style.transitionDuration = instant ? '0s' : '1.5s';
+    ongoingFade.style.opacity = '0';
   }
 
   // Flipbook 8 frames joue une fois en fond au moment de la revelation.
@@ -1142,6 +1367,8 @@
     if(waitingController){ waitingController.stop(); waitingController = null; }
     if(stopRayCycleFn) stopRayCycleFn();
     if(stopCoinFountainFn) stopCoinFountainFn();
+    resetAvatarCrowd();
+    resetOngoingFade(true);
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -1183,8 +1410,10 @@
       rewardCard.classList.remove('visible');
       rewardVideo.classList.remove('visible');
       startRayCycle(); // meme comportement que le vrai playOngoing
-      startCoinFountain();
+      startCoinFountain('epique'); // palier le plus riche, pour previsualiser tous les effets
       triggerOpenFlash();
+      ongoingFade.style.transitionDuration = '5000ms'; // pas de piste audio en debug, duree fixe
+      ongoingFade.style.opacity = String(ONGOING_FADE_TARGET);
     },
     reveal(){
       forceStopEverything();
@@ -1203,6 +1432,13 @@
       rewardCardLogin.textContent = 'ViewerTest';
       rewardVideo.classList.remove('visible');
       rewardCard.classList.add('visible');
+      // forceStopEverything() (au tout debut de cet etat) vide toujours la
+      // foule - en fabrique une petite ici pour pouvoir previsualiser le
+      // saut/sautillement sans avoir a chainer depuis "Jaillissement".
+      if(avatarCrowdEl.children.length === 0){
+        for(let i = 0; i < 18; i++) spawnCrowdAvatar();
+      }
+      triggerCrowdCelebration();
     },
   };
 

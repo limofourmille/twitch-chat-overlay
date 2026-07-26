@@ -9,6 +9,9 @@ par courtoisie et pour retrouver la source si besoin.
 - **Pieces qui tournent** (`coins/coin-spin-0.png` a `coin-spin-9.png`) :
   dessin original du streamer (10 frames de rotation), pas de licence tierce
   a documenter.
+- **Avatars qui dansent** (`avatars/avatar-dance-0.png` a `avatar-dance-8.png`) :
+  dessin original du streamer (9 frames de boucle de danse), pas de licence
+  tierce a documenter.
 - **Icones** (`icons/`) : [Game Icons](https://kenney.nl/assets/game-icons) +
   [Game Icons Expansion](https://kenney.nl/assets/game-icons-expansion) par
   Kenney. CC0.
