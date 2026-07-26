@@ -238,16 +238,23 @@
   /* ---------------------------- Panneau de test (?debug=1 uniquement) ---------------------------- */
   .debug-panel{
     display:none;
+    flex-direction:column;
     position:fixed; left:12px; top:12px;
     z-index:10;
     background:rgba(17,17,17,0.9);
     border:1px solid rgba(255,255,255,0.25);
     border-radius:10px;
     padding:10px;
-    gap:6px;
+    gap:8px;
     pointer-events:auto;
+    max-width:420px;
   }
   .debug-panel.visible{ display:flex; }
+  .debug-panel-row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .debug-panel-label{
+    font-family:inherit; font-size:11px; font-weight:600;
+    color:rgba(255,255,255,0.5); text-transform:uppercase; letter-spacing:0.05em;
+  }
   .debug-panel button{
     font-family:inherit;
     font-size:12px;
@@ -260,16 +267,32 @@
     cursor:pointer;
   }
   .debug-panel button:hover{ filter:brightness(0.9); }
+  .debug-panel button.secondary{ background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .debug-panel button.active{ outline:2px solid #fff; outline-offset:1px; }
 </style>
 </head>
 <body>
 
 <div class="debug-panel" id="debug-panel">
-  <button data-test="follow">Test follow</button>
-  <button data-test="sub:1000">Test sub T1</button>
-  <button data-test="sub:2000">Test sub T2</button>
-  <button data-test="sub:3000">Test sub T3</button>
-  <button id="debug-close-btn">Fermer le coffre</button>
+  <div class="debug-panel-row">
+    <span class="debug-panel-label">Animation complete</span>
+  </div>
+  <div class="debug-panel-row">
+    <button data-test="follow">Test follow</button>
+    <button data-test="sub:1000">Test sub T1</button>
+    <button data-test="sub:2000">Test sub T2</button>
+    <button data-test="sub:3000">Test sub T3</button>
+    <button id="debug-close-btn">Fermer le coffre</button>
+  </div>
+  <div class="debug-panel-row">
+    <span class="debug-panel-label">Forcer une etape (reste figee, pas d'auto-suite)</span>
+  </div>
+  <div class="debug-panel-row" id="debug-force-row">
+    <button class="secondary" data-force="idle">Ferme</button>
+    <button class="secondary" data-force="shaking">Secousses</button>
+    <button class="secondary" data-force="bursting">Jaillissement</button>
+    <button class="secondary" data-force="reveal">Revelation</button>
+  </div>
 </div>
 
 <div class="stage">
@@ -887,6 +910,85 @@
       .subscribe();
   }
 
+  // Fige directement un etat visuel donne, sans passer par la file/les
+  // pistes audio - permet de regler l'apparence (rayons, decalages...) sans
+  // avoir a rejouer toute l'animation a chaque fois. Reste affiche
+  // indefiniment (aucune suite programmee) jusqu'au prochain forcage ou
+  // test complet. Coupe d'abord tout ce qui tournait (file, audio, boucle
+  // d'attente) pour eviter qu'une animation en cours ne vienne re-changer
+  // les classes juste apres.
+  function forceStopEverything(){
+    queue.length = 0;
+    processing = false;
+    animating = false;
+    activeCloseResolve = null;
+    if(waitingController){ waitingController.stop(); waitingController = null; }
+    activeAudios.forEach((audio) => audio.pause());
+    activeAudios.clear();
+  }
+
+  function markActiveForceButton(step){
+    document.querySelectorAll('#debug-force-row button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.force === step);
+    });
+  }
+
+  const FORCE_STATES = {
+    idle(){
+      forceStopEverything();
+      chestSprite.src = manifest.chestFrames[0];
+      chestWrap.classList.remove('bursting', 'pulse');
+      impactFlash.classList.remove('flash');
+      chestWrap.classList.add('visible', 'idle-bob');
+      burstWrap.classList.remove('visible');
+      rewardCard.classList.remove('visible');
+      rewardVideo.classList.remove('visible');
+    },
+    shaking(){
+      forceStopEverything();
+      chestSprite.src = manifest.chestFrames[0];
+      chestWrap.classList.remove('bursting', 'idle-bob');
+      chestWrap.classList.add('visible', 'pulse');
+      impactFlash.classList.add('flash');
+      burstWrap.classList.remove('visible');
+      rewardCard.classList.remove('visible');
+      rewardVideo.classList.remove('visible');
+    },
+    bursting(){
+      forceStopEverything();
+      chestSprite.src = manifest.chestFrames[3];
+      chestWrap.classList.remove('idle-bob', 'pulse');
+      impactFlash.classList.remove('flash');
+      chestWrap.classList.add('visible', 'bursting');
+      burstWrap.classList.add('visible');
+      rewardCard.classList.remove('visible');
+      rewardVideo.classList.remove('visible');
+    },
+    reveal(){
+      forceStopEverything();
+      const reward = 'epique';
+      chestSprite.src = manifest.chestFrames[3];
+      chestWrap.classList.remove('idle-bob', 'pulse');
+      impactFlash.classList.remove('flash');
+      chestWrap.classList.add('visible', 'bursting');
+      burstWrap.classList.add('visible');
+      resultIcon.src = manifest.rewardIcon[reward];
+      resultIcon.classList.remove('rising');
+      void resultIcon.offsetWidth; // relance l'animation CSS
+      resultIcon.classList.add('rising');
+      rewardCardIcon.src = manifest.rewardIcon[reward];
+      rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
+      rewardCardLogin.textContent = 'ViewerTest';
+      rewardVideo.classList.remove('visible');
+      rewardCard.classList.add('visible');
+    },
+  };
+
+  function forceStep(step){
+    FORCE_STATES[step]();
+    markActiveForceButton(step);
+  }
+
   // Panneau visible uniquement sur chest-overlay.html?debug=1 (jamais dans
   // OBS en usage normal) : boutons pour rejouer l'animation sans backend, a
   // volonte, pendant qu'on regle les timings/assets.
@@ -895,11 +997,16 @@
     panel.classList.add('visible');
     panel.querySelectorAll('button[data-test]').forEach((btn) => {
       btn.addEventListener('click', () => {
+        forceStopEverything();
+        markActiveForceButton(null);
         const testEvent = buildTestEvent(btn.dataset.test);
         if(testEvent) enqueueEvent(testEvent);
       });
     });
     document.getElementById('debug-close-btn').addEventListener('click', forceClose);
+    document.querySelectorAll('#debug-force-row button[data-force]').forEach((btn) => {
+      btn.addEventListener('click', () => forceStep(btn.dataset.force));
+    });
   }
 
   async function init(){
