@@ -114,19 +114,6 @@
     100%{ opacity:0; }
   }
 
-  /* Fond qui blanchit progressivement pendant ongoing-<palier>.mp3 (voir
-     startOngoingFade) - premier enfant de .stage, donc derriere le coffre/
-     les rayons/la foule : sert uniquement a augmenter le contraste pour que
-     le trait noir des avatars (antennes comprises) redevienne visible sur
-     un fond qui etait jusque-la sombre. Revient a 0 au debut de la
-     revelation (voir resetOngoingFade dans playEnding). */
-  .ongoing-fade{
-    position:absolute; inset:0;
-    background:#fff;
-    opacity:0;
-    pointer-events:none;
-    transition:opacity linear;
-  }
 
   /* ---------------------------- Feu d'artifice (flipbook 8 frames) ---------------------------- */
   .firework{
@@ -291,33 +278,59 @@
     100%{ transform:translate(-50%, -180px) scale(1.4); opacity:1; filter:drop-shadow(0 0 18px rgba(255,255,255,0.9)); }
   }
 
-  /* ---------------------------- Carte de recompense (fallback sans video) ---------------------------- */
+  /* ---------------------------- Carte de recompense (fallback sans video) ----------------------------
+     Meme habillage "encre" que les messages de twitch-chat-ink.html (brush
+     peinte en fond + texte cursive au contour noir simule par text-shadow -
+     voir applyRewardCardBrush) - superposee a la position finale de
+     l'icone qui monte au-dessus du coffre (result-rise se termine a
+     translateY(-180px) depuis le meme point d'ancrage fx-origin-x/y). */
   .reward-card{
     position:absolute; inset:0;
-    display:flex; align-items:center; justify-content:center;
     opacity:0;
     transition:opacity 0.4s ease;
     pointer-events:none;
   }
   .reward-card.visible{ opacity:1; }
   .reward-card-inner{
-    text-align:center;
-    background:#111111;
-    border:2px solid var(--accent);
-    border-radius:16px;
-    padding:28px 40px;
-    box-shadow:0 0 30px rgba(255,255,255,0.35);
+    position:absolute;
+    left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
+    transform:translate(-50%, -180px);
   }
-  .reward-card-icon{ width:56px; height:56px; margin-bottom:8px; }
+  .reward-card-content{
+    position:relative; z-index:1;
+    display:flex; flex-direction:column; align-items:center;
+    padding:16px 14px;
+  }
+  .reward-card-brush{
+    position:absolute;
+    z-index:0;
+    background-size:100% 100%;
+    background-repeat:no-repeat;
+    background-position:center;
+    opacity:0;
+    transform:scale(0.85);
+    transition:opacity 0.25s ease, transform 0.25s ease;
+  }
+  .reward-card.visible .reward-card-brush{ opacity:1; transform:scale(1); }
+  .reward-card-icon{ width:52px; height:52px; margin-bottom:2px; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.6)); }
+  .reward-card-tier,
+  .reward-card-login{
+    font-family:'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
+    color:white;
+    text-shadow:
+      -2px -2px 0 black,  2px -2px 0 black,
+      -2px  2px 0 black,  2px  2px 0 black,
+      -2px  0   0 black,  2px  0   0 black,
+       0   -2px 0 black,  0    2px 0 black,
+       0 0 6px black;
+  }
   .reward-card-tier{
     text-transform:uppercase;
-    letter-spacing:0.08em;
-    color:var(--accent);
+    letter-spacing:0.05em;
     font-weight:700;
-    font-size:14px;
-    margin-bottom:4px;
+    font-size:15px;
   }
-  .reward-card-login{ font-size:20px; font-weight:600; }
+  .reward-card-login{ font-weight:700; font-size:22px; }
 
   .reward-video{
     position:absolute; inset:0;
@@ -389,8 +402,6 @@
 </div>
 
 <div class="stage">
-  <div class="ongoing-fade" id="ongoing-fade"></div>
-
   <div class="chest-wrap" id="chest-wrap">
     <div class="impact-flash" id="impact-flash"></div>
     <div class="burst"></div>
@@ -409,9 +420,12 @@
 
   <div class="reward-card" id="reward-card">
     <div class="reward-card-inner">
-      <img class="reward-card-icon" id="reward-card-icon" alt="">
-      <div class="reward-card-tier" id="reward-card-tier">Epique</div>
-      <div class="reward-card-login" id="reward-card-login">pseudo</div>
+      <div class="reward-card-brush" id="reward-card-brush"></div>
+      <div class="reward-card-content" id="reward-card-content">
+        <img class="reward-card-icon" id="reward-card-icon" alt="">
+        <div class="reward-card-tier" id="reward-card-tier">Epique</div>
+        <div class="reward-card-login" id="reward-card-login">pseudo</div>
+      </div>
     </div>
   </div>
 
@@ -457,7 +471,6 @@
   const chestSprite = document.getElementById('chest-sprite');
   const impactFlash = document.getElementById('impact-flash');
   const openFlash = document.getElementById('open-flash');
-  const ongoingFade = document.getElementById('ongoing-fade');
   const firework = document.getElementById('firework');
   const burstWrap = document.getElementById('burst-wrap');
   const chestRayEls = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
@@ -467,6 +480,8 @@
   const rewardCardIcon = document.getElementById('reward-card-icon');
   const rewardCardTier = document.getElementById('reward-card-tier');
   const rewardCardLogin = document.getElementById('reward-card-login');
+  const rewardCardBrush = document.getElementById('reward-card-brush');
+  const rewardCardContent = document.getElementById('reward-card-content');
   const rewardVideo = document.getElementById('reward-video');
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -858,7 +873,6 @@
     chestWrap.classList.remove('bursting', 'idle-bob');
     chestWrap.classList.add('visible');
     resetAvatarCrowd(); // repart d'une foule vide pour ce nouveau tirage
-    resetOngoingFade(true);
 
     // Precharge les 3 pistes tout de suite (pendant que la boucle d'attente
     // termine son tour) : chacune a ainsi toute la duree necessaire pour
@@ -974,8 +988,7 @@
     burstWrap.classList.add('visible');
     const stopRayCycle = startRayCycle();
     const stopCoinFountain = startCoinFountain(reward);
-    const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
-    startOngoingFade(audio);
+    const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
@@ -988,7 +1001,6 @@
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
   async function playEnding(ev, reward, preloadedAudio){
     const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
-    resetOngoingFade();
     triggerCrowdCelebration();
 
     playFirework();
@@ -1006,6 +1018,8 @@
       rewardCardIcon.src = manifest.rewardIcon[reward];
       rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
       rewardCardLogin.textContent = ev.twitch_login;
+      await waitForRewardCardIcon();
+      applyRewardCardBrush(); // recadre une brush aleatoire sur la taille reelle du contenu
       rewardCard.classList.add('visible');
       await done;
     }
@@ -1235,31 +1249,68 @@
     openFlash.classList.add('flash');
   }
 
-  // Fait blanchir progressivement le fond pendant toute la duree reelle de
-  // `audio` (ongoing-<palier>.mp3), pour faire ressortir le trait noir des
-  // avatars (antennes comprises) qui se voyait mal sur fond sombre. Cible
-  // 0.85 plutot que 1 pour garder une transition douce sans passer au
-  // blanc plein ecran.
-  const ONGOING_FADE_TARGET = 0.85;
-  function startOngoingFade(audio){
-    const apply = () => {
-      const ms = (isFinite(audio.duration) && audio.duration > 0) ? audio.duration * 1000 : 8000;
-      ongoingFade.style.transitionDuration = ms + 'ms';
-      ongoingFade.style.opacity = String(ONGOING_FADE_TARGET);
-    };
-    if(audio.readyState >= HTMLMediaElement.HAVE_METADATA && isFinite(audio.duration) && audio.duration > 0){
-      apply();
-    }else{
-      audio.addEventListener('loadedmetadata', apply, { once: true });
-    }
+  // ---------------------------- Habillage "encre" de la carte de recompense ----------------------------
+  // Meme technique que twitch-chat-ink.html (brush peinte en fond, recadree
+  // sur sa zone reellement encree) - voir applyRewardCardBrush.
+  const REWARD_BRUSH_IMAGES = [
+    'assets/brush-01.png', 'assets/brush-02.png', 'assets/brush-03.png', 'assets/brush-04.png', 'assets/brush-05.png',
+    'assets/brush-06.png', 'assets/brush-07.png', 'assets/brush-08.png', 'assets/brush-09.png', 'assets/brush-10.png',
+  ];
+  const REWARD_BRUSH_INK_BOUNDS = {
+    'assets/brush-01.png': { x0:0.034, x1:0.935, y0:0.033, y1:0.910 },
+    'assets/brush-02.png': { x0:0.024, x1:0.952, y0:0.057, y1:0.932 },
+    'assets/brush-03.png': { x0:0.015, x1:0.888, y0:0.073, y1:0.921 },
+    'assets/brush-04.png': { x0:0.045, x1:0.952, y0:0.075, y1:0.951 },
+    'assets/brush-05.png': { x0:0.011, x1:0.972, y0:0.087, y1:0.937 },
+    'assets/brush-06.png': { x0:0.013, x1:0.929, y0:0.056, y1:0.888 },
+    'assets/brush-07.png': { x0:0.014, x1:0.922, y0:0.098, y1:0.908 },
+    'assets/brush-08.png': { x0:0.009, x1:0.901, y0:0.039, y1:0.984 },
+    'assets/brush-09.png': { x0:0.055, x1:0.942, y0:0.163, y1:0.876 },
+    'assets/brush-10.png': { x0:0.044, x1:0.929, y0:0.035, y1:0.855 },
+  };
+  const REWARD_BRUSH_PAD_X = 20, REWARD_BRUSH_PAD_Y = 14;
+
+  // La mesure de rewardCardContent (utilisee par applyRewardCardBrush) doit
+  // attendre que l'icone soit chargee, sinon sa hauteur vaut 0 et la brush
+  // se recadre sur un bloc trop petit.
+  function waitForRewardCardIcon(){
+    if(rewardCardIcon.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      rewardCardIcon.addEventListener('load', resolve, { once: true });
+      rewardCardIcon.addEventListener('error', resolve, { once: true });
+    });
   }
 
-  // Revient a un fond neutre pour la revelation - appelee au debut de
-  // playEnding, et en dur (sans transition) a chaque remise a zero
-  // (nouveau tirage, forceStopEverything).
-  function resetOngoingFade(instant){
-    ongoingFade.style.transitionDuration = instant ? '0s' : '1.5s';
-    ongoingFade.style.opacity = '0';
+  // Calcule un background-size/position en px tels que la zone reellement
+  // encree du PNG (REWARD_BRUSH_INK_BOUNDS) recouvre exactement contentW x
+  // contentH sans deborder sur le padding autour - identique a
+  // brushBackgroundStyle() dans twitch-chat-ink.html.
+  function rewardBrushBackgroundStyle(imgPath, contentW, contentH, padX, padY){
+    const b = REWARD_BRUSH_INK_BOUNDS[imgPath];
+    const boxW = contentW + padX * 2, boxH = contentH + padY * 2;
+    if(!b) return { size: `${boxW}px ${boxH}px`, position: '0px 0px' };
+    const wFrac = b.x1 - b.x0, hFrac = b.y1 - b.y0;
+    const scaledW = contentW / wFrac, scaledH = contentH / hFrac;
+    const posX = padX - b.x0 * scaledW, posY = padY - b.y0 * scaledH;
+    return { size: `${scaledW.toFixed(2)}px ${scaledH.toFixed(2)}px`, position: `${posX.toFixed(2)}px ${posY.toFixed(2)}px` };
+  }
+
+  // Pose une brush aleatoire derriere le contenu de la carte, cadree sur sa
+  // taille reelle (icone + texte deja rendus) - appelee juste avant
+  // d'afficher la carte, une fois l'icone chargee pour ne pas mesurer un
+  // bloc qui va encore bouger.
+  function applyRewardCardBrush(){
+    const w = rewardCardContent.offsetWidth;
+    const h = rewardCardContent.offsetHeight;
+    const imgPath = REWARD_BRUSH_IMAGES[Math.floor(Math.random() * REWARD_BRUSH_IMAGES.length)];
+    const { size, position } = rewardBrushBackgroundStyle(imgPath, w, h, REWARD_BRUSH_PAD_X, REWARD_BRUSH_PAD_Y);
+    rewardCardBrush.style.backgroundImage = `url('${imgPath}')`;
+    rewardCardBrush.style.backgroundSize = size;
+    rewardCardBrush.style.backgroundPosition = position;
+    rewardCardBrush.style.left = -REWARD_BRUSH_PAD_X + 'px';
+    rewardCardBrush.style.top = -REWARD_BRUSH_PAD_Y + 'px';
+    rewardCardBrush.style.width = (w + REWARD_BRUSH_PAD_X * 2) + 'px';
+    rewardCardBrush.style.height = (h + REWARD_BRUSH_PAD_Y * 2) + 'px';
   }
 
   // Flipbook 8 frames joue une fois en fond au moment de la revelation.
@@ -1368,7 +1419,6 @@
     if(stopRayCycleFn) stopRayCycleFn();
     if(stopCoinFountainFn) stopCoinFountainFn();
     resetAvatarCrowd();
-    resetOngoingFade(true);
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -1412,8 +1462,6 @@
       startRayCycle(); // meme comportement que le vrai playOngoing
       startCoinFountain('epique'); // palier le plus riche, pour previsualiser tous les effets
       triggerOpenFlash();
-      ongoingFade.style.transitionDuration = '5000ms'; // pas de piste audio en debug, duree fixe
-      ongoingFade.style.opacity = String(ONGOING_FADE_TARGET);
     },
     reveal(){
       forceStopEverything();
@@ -1431,6 +1479,7 @@
       rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
       rewardCardLogin.textContent = 'ViewerTest';
       rewardVideo.classList.remove('visible');
+      waitForRewardCardIcon().then(applyRewardCardBrush);
       rewardCard.classList.add('visible');
       // forceStopEverything() (au tout debut de cet etat) vide toujours la
       // foule - en fabrique une petite ici pour pouvoir previsualiser le
