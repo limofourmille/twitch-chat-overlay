@@ -192,6 +192,38 @@
     100%{ transform:translate(calc(-50% + var(--drift, 0px)), -60vh) scale(1); opacity:0; }
   }
 
+  /* Fontaines a pieces (une de chaque cote du coffre, dans .chest-wrap donc
+     ancrees pareil que .chest-sprite/.chest-ray). Trajectoire parabolique :
+     resserree pres du coffre (faible variance sur --fly-peak-x), puis
+     s'elargit vers le bas (forte variance sur --fly-x, tire au hasard par
+     piece dans spawnFountainCoin) - voir playOngoing. */
+  .coin-fountain{
+    position:absolute;
+    width:26px; height:26px;
+    object-fit:contain;
+    opacity:0;
+    pointer-events:none;
+    animation: coin-fountain-fly 900ms forwards;
+  }
+  .coin-fountain-left{ left:6%; top:62%; }
+  .coin-fountain-right{ left:94%; top:62%; }
+  @keyframes coin-fountain-fly{
+    0%{
+      transform:translate(-50%, -50%) translate(0, 0) scale(0.6);
+      opacity:0;
+      animation-timing-function: ease-out;
+    }
+    12%{ opacity:1; }
+    40%{
+      transform:translate(-50%, -50%) translate(var(--fly-peak-x, 0px), var(--fly-peak-y, -30px)) scale(0.85);
+      animation-timing-function: ease-in;
+    }
+    100%{
+      transform:translate(-50%, -50%) translate(var(--fly-x, 80px), var(--fly-y, 260px)) scale(1);
+      opacity:0;
+    }
+  }
+
   .result-icon{
     position:absolute; left:var(--fx-origin-x, 50%); bottom:var(--fx-origin-y, 50%);
     width:64px; height:64px;
@@ -806,14 +838,32 @@
     return stopRayCycleFn;
   }
 
+  // Fontaine a pieces continue des deux cotes du coffre (voir spawnFountainCoin
+  // pour la trajectoire). stopCoinFountainFn est garde au niveau module pour
+  // que forceStopEverything() puisse couper une fontaine laissee en cours.
+  let stopCoinFountainFn = null;
+  function startCoinFountain(intervalMs = 180){
+    const timer = setInterval(() => {
+      spawnFountainCoin('left');
+      spawnFountainCoin('right');
+    }, intervalMs);
+    stopCoinFountainFn = () => {
+      clearInterval(timer);
+      stopCoinFountainFn = null;
+    };
+    return stopCoinFountainFn;
+  }
+
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
   async function playOngoing(reward, preloadedAudio){
     burstWrap.classList.add('visible');
     const stopRayCycle = startRayCycle();
+    const stopCoinFountain = startCoinFountain();
     const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
+    stopCoinFountain();
     // Les 3 rayons restent affiches ensemble (pas de retour a "aucun
     // rayon") pendant toute la revelation - voir playEnding.
     stopRayCycle();
@@ -860,6 +910,47 @@
     el.style.left = (50 + (Math.random() * 20 - 10)) + '%';
     burstWrap.appendChild(el);
     el.addEventListener('animationend', () => el.remove());
+  }
+
+  // Piece jaillissant d'un cote du coffre (voir .coin-fountain-left/right),
+  // trajectoire parabolique resserree pres du coffre et qui s'elargit vers
+  // le bas : --fly-peak-x (montee, faible variance) reste proche de 0,
+  // --fly-x (chute, forte variance 70-240px) fixe l'ecart final - c'est cet
+  // ecart tire au hasard par piece qui cree l'evasement du jet au fil de la
+  // chute. Fait tourner la piece sur elle-meme via le flipbook coinSpinFrames
+  // pendant tout le vol.
+  function spawnFountainCoin(side){
+    const dir = side === 'left' ? -1 : 1;
+    const frames = manifest.coinSpinFrames;
+    let frameIdx = Math.floor(Math.random() * frames.length);
+
+    const el = document.createElement('img');
+    el.className = `coin-fountain coin-fountain-${side}`;
+    el.src = frames[frameIdx];
+
+    const peakSpread = 8 + Math.random() * 20;   // 8-28px : resserre pres du coffre
+    const peakHeight = 16 + Math.random() * 30;  // 16-46px de montee avant la chute
+    const spread = 70 + Math.random() * 170;     // 70-240px : evase vers le bas
+    const fallDistance = 220 + Math.random() * 180; // 220-400px de chute
+    const duration = 750 + Math.random() * 400;  // 750-1150ms de vol
+
+    el.style.setProperty('--fly-peak-x', (dir * peakSpread) + 'px');
+    el.style.setProperty('--fly-peak-y', (-peakHeight) + 'px');
+    el.style.setProperty('--fly-x', (dir * spread) + 'px');
+    el.style.setProperty('--fly-y', fallDistance + 'px');
+    el.style.animationDuration = duration + 'ms';
+
+    chestWrap.appendChild(el);
+
+    const frameTimer = setInterval(() => {
+      frameIdx = (frameIdx + 1) % frames.length;
+      el.src = frames[frameIdx];
+    }, 70);
+
+    el.addEventListener('animationend', () => {
+      clearInterval(frameTimer);
+      el.remove();
+    });
   }
 
   // Flipbook 8 frames joue une fois en fond au moment de la revelation.
@@ -966,6 +1057,7 @@
     activeCloseResolve = null;
     if(waitingController){ waitingController.stop(); waitingController = null; }
     if(stopRayCycleFn) stopRayCycleFn();
+    if(stopCoinFountainFn) stopCoinFountainFn();
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -1007,6 +1099,7 @@
       rewardCard.classList.remove('visible');
       rewardVideo.classList.remove('visible');
       startRayCycle(); // meme comportement que le vrai playOngoing
+      startCoinFountain();
     },
     reveal(){
       forceStopEverything();
