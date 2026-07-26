@@ -139,12 +139,15 @@
     pointer-events:none;
   }
   .chest-wrap.bursting .chest-ray{ animation: ray-pulse 1.4s ease-in-out infinite; }
-  /* Apex a (302,397)/700 - cf. light-ray-1.png. Decalage individuel reglable
-     depuis chest-control.html (--ray1-offset-x/y, voir applySettings). */
+  /* Apex a (302,397)/700 - cf. light-ray-1.png. Decalage/rotation individuels
+     reglables depuis chest-control.html (--ray1-offset-x/y/--ray1-rotation,
+     voir applySettings). La rotation pivote autour de l'apex, comme
+     transform-origin est 50% 100% - donc apres le translate qui place ce
+     point sur l'ancrage left/top. */
   .chest-ray-1{
     left:calc(43.1% + var(--ray1-offset-x, 0%)); top:calc(56.7% + var(--ray1-offset-y, 0%));
     width:70vh; height:70vh;
-    transform:translate(-50%, -100%);
+    transform:translate(-50%, -100%) rotate(var(--ray1-rotation, 0deg));
     clip-path: polygon(48% 100%, 52% 100%, 72.4% 0%, 6.9% 0%);
     background:linear-gradient(0deg, rgba(255,170,70,0.6), rgba(255,170,70,0));
   }
@@ -152,7 +155,7 @@
   .chest-ray-2{
     left:calc(51.4% + var(--ray2-offset-x, 0%)); top:calc(65.7% + var(--ray2-offset-y, 0%));
     width:119vh; height:70vh;
-    transform:translate(-50%, -100%);
+    transform:translate(-50%, -100%) rotate(var(--ray2-rotation, 0deg));
     clip-path: polygon(48% 100%, 52% 100%, 92.5% 0%, 49.4% 0%);
     background:linear-gradient(0deg, rgba(255,120,60,0.6), rgba(255,120,60,0));
     animation-delay:0.2s;
@@ -161,7 +164,7 @@
   .chest-ray-3{
     left:calc(14.9% + var(--ray3-offset-x, 0%)); top:calc(56.7% + var(--ray3-offset-y, 0%));
     width:101.5vh; height:70vh;
-    transform:translate(-50%, -100%);
+    transform:translate(-50%, -100%) rotate(var(--ray3-rotation, 0deg));
     clip-path: polygon(48% 100%, 52% 100%, 93% 0%, 7% 0%);
     background:linear-gradient(0deg, rgba(255,200,90,0.6), rgba(255,200,90,0));
     animation-delay:0.4s;
@@ -468,14 +471,16 @@
     if(Number.isFinite(row.effect_origin_y_percent)){
       document.documentElement.style.setProperty('--fx-origin-y', row.effect_origin_y_percent + '%');
     }
-    // Decalage individuel par rayon (voir .chest-ray-1/2/3), pour corriger
-    // leur position un par un en direct sans toucher au code - meme
-    // principe que --fx-origin-x/y ci-dessus.
+    // Decalage/rotation individuels par rayon (voir .chest-ray-1/2/3), pour
+    // corriger leur position/angle un par un en direct sans toucher au code
+    // - meme principe que --fx-origin-x/y ci-dessus.
     for(const n of [1, 2, 3]){
       const x = row[`ray${n}_offset_x_percent`];
       const y = row[`ray${n}_offset_y_percent`];
+      const rot = row[`ray${n}_rotation_deg`];
       if(Number.isFinite(x)) document.documentElement.style.setProperty(`--ray${n}-offset-x`, x + '%');
       if(Number.isFinite(y)) document.documentElement.style.setProperty(`--ray${n}-offset-y`, y + '%');
+      if(Number.isFinite(rot)) document.documentElement.style.setProperty(`--ray${n}-rotation`, rot + 'deg');
     }
   }
 

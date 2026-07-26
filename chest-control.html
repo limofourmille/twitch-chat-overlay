@@ -250,6 +250,13 @@
           <span class="range-value" id="setting-ray1-offset-y-value">0%</span>
         </div>
       </div>
+      <div class="setting-row">
+        <label for="setting-ray1-rotation">Rotation</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray1-rotation" min="-180" max="180" step="1">
+          <span class="range-value" id="setting-ray1-rotation-value">0deg</span>
+        </div>
+      </div>
     </div>
     <div class="tier-panel" data-ray-panel="2">
       <div class="setting-row">
@@ -266,6 +273,13 @@
           <span class="range-value" id="setting-ray2-offset-y-value">0%</span>
         </div>
       </div>
+      <div class="setting-row">
+        <label for="setting-ray2-rotation">Rotation</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray2-rotation" min="-180" max="180" step="1">
+          <span class="range-value" id="setting-ray2-rotation-value">0deg</span>
+        </div>
+      </div>
     </div>
     <div class="tier-panel" data-ray-panel="3">
       <div class="setting-row">
@@ -280,6 +294,13 @@
         <div class="setting-input">
           <input type="range" id="setting-ray3-offset-y" min="-100" max="100" step="1">
           <span class="range-value" id="setting-ray3-offset-y-value">0%</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="setting-ray3-rotation">Rotation</label>
+        <div class="setting-input">
+          <input type="range" id="setting-ray3-rotation" min="-180" max="180" step="1">
+          <span class="range-value" id="setting-ray3-rotation-value">0deg</span>
         </div>
       </div>
     </div>
@@ -409,6 +430,8 @@
       xValue: document.getElementById(`setting-ray${n}-offset-x-value`),
       y: document.getElementById(`setting-ray${n}-offset-y`),
       yValue: document.getElementById(`setting-ray${n}-offset-y-value`),
+      rotation: document.getElementById(`setting-ray${n}-rotation`),
+      rotationValue: document.getElementById(`setting-ray${n}-rotation-value`),
     };
   });
 
@@ -591,10 +614,13 @@
     RAYS.forEach((n) => {
       const x = data[`ray${n}_offset_x_percent`];
       const y = data[`ray${n}_offset_y_percent`];
+      const rot = data[`ray${n}_rotation_deg`];
       rayInputs[n].x.value = x;
       rayInputs[n].xValue.textContent = x + '%';
       rayInputs[n].y.value = y;
       rayInputs[n].yValue.textContent = y + '%';
+      rayInputs[n].rotation.value = rot;
+      rayInputs[n].rotationValue.textContent = rot + 'deg';
     });
   }
 
@@ -619,6 +645,7 @@
     RAYS.forEach((n) => {
       body[`ray${n}_offset_x_percent`] = Number(rayInputs[n].x.value);
       body[`ray${n}_offset_y_percent`] = Number(rayInputs[n].y.value);
+      body[`ray${n}_rotation_deg`] = Number(rayInputs[n].rotation.value);
     });
 
     const { data, error } = await sb.functions.invoke('update-chest-settings', { body });
@@ -697,6 +724,9 @@
     });
     rayInputs[n].y.addEventListener('input', () => {
       rayInputs[n].yValue.textContent = rayInputs[n].y.value + '%';
+    });
+    rayInputs[n].rotation.addEventListener('input', () => {
+      rayInputs[n].rotationValue.textContent = rayInputs[n].rotation.value + 'deg';
     });
   });
 
