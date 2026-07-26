@@ -140,6 +140,11 @@
     pointer-events:none;
   }
   .chest-wrap.bursting .chest-ray{ animation: ray-pulse 1.4s ease-in-out infinite; }
+  /* Pendant le jaillissement (playOngoing), les 3 rayons alternent un par un
+     au lieu d'etre tous affiches en meme temps (voir cycleRays) - retire au
+     debut de la revelation, ou les 3 restent affiches ensemble. */
+  .chest-wrap.bursting.cycling .chest-ray{ animation:none; opacity:0; }
+  .chest-wrap.bursting.cycling .chest-ray.ray-active{ animation: ray-pulse 1.4s ease-in-out infinite; }
   /* Apex a (302,397)/700 - cf. light-ray-1.png. Decalage/rotation individuels
      reglables depuis chest-control.html (--ray1-offset-x/y/--ray1-rotation,
      voir applySettings). La rotation pivote autour de l'apex, comme
@@ -304,9 +309,9 @@
     <div class="impact-flash" id="impact-flash"></div>
     <div class="burst"></div>
     <img class="chest-sprite" id="chest-sprite" alt="">
-    <div class="chest-ray chest-ray-1"></div>
-    <div class="chest-ray chest-ray-2"></div>
-    <div class="chest-ray chest-ray-3"></div>
+    <div class="chest-ray chest-ray-1" id="chest-ray-1"></div>
+    <div class="chest-ray chest-ray-2" id="chest-ray-2"></div>
+    <div class="chest-ray chest-ray-3" id="chest-ray-3"></div>
   </div>
 
   <img class="firework" id="firework" alt="">
@@ -364,6 +369,7 @@
   const impactFlash = document.getElementById('impact-flash');
   const firework = document.getElementById('firework');
   const burstWrap = document.getElementById('burst-wrap');
+  const chestRayEls = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
   const resultIcon = document.getElementById('result-icon');
   const rewardCard = document.getElementById('reward-card');
   const rewardCardIcon = document.getElementById('reward-card-icon');
@@ -774,13 +780,43 @@
     chestWrap.classList.add('bursting'); // flash radial (voir .burst), en parallele de la suite
   }
 
+  // Alterne l'affichage entre les 3 rayons (un seul visible a la fois, en
+  // boucle 1 -> 2 -> 3) au lieu des 3 en meme temps - utilise pendant le
+  // jaillissement. stopRayCycleFn est garde au niveau module pour que
+  // forceStopEverything() puisse couper une boucle laissee en cours (ex.
+  // bouton debug clique en plein jaillissement).
+  let stopRayCycleFn = null;
+  function startRayCycle(intervalMs = 500){
+    chestWrap.classList.add('cycling');
+    let activeIdx = 0;
+    const applyActive = () => {
+      chestRayEls.forEach((el, i) => el.classList.toggle('ray-active', i === activeIdx));
+    };
+    applyActive();
+    const timer = setInterval(() => {
+      activeIdx = (activeIdx + 1) % chestRayEls.length;
+      applyActive();
+    }, intervalMs);
+    stopRayCycleFn = () => {
+      clearInterval(timer);
+      chestWrap.classList.remove('cycling');
+      chestRayEls.forEach((el) => el.classList.remove('ray-active'));
+      stopRayCycleFn = null;
+    };
+    return stopRayCycleFn;
+  }
+
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
   async function playOngoing(reward, preloadedAudio){
     burstWrap.classList.add('visible');
+    const stopRayCycle = startRayCycle();
     const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
     const spawnTimer = setInterval(spawnFloatingIcon, 140);
     await done;
     clearInterval(spawnTimer);
+    // Les 3 rayons restent affiches ensemble (pas de retour a "aucun
+    // rayon") pendant toute la revelation - voir playEnding.
+    stopRayCycle();
   }
 
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
@@ -929,6 +965,7 @@
     animating = false;
     activeCloseResolve = null;
     if(waitingController){ waitingController.stop(); waitingController = null; }
+    if(stopRayCycleFn) stopRayCycleFn();
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -969,6 +1006,7 @@
       burstWrap.classList.add('visible');
       rewardCard.classList.remove('visible');
       rewardVideo.classList.remove('visible');
+      startRayCycle(); // meme comportement que le vrai playOngoing
     },
     reveal(){
       forceStopEverything();
