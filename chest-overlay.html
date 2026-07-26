@@ -235,7 +235,6 @@
   }
   .avatar-crowd-member{
     position:absolute;
-    width:52px; height:52px;
     object-fit:contain;
     transform:translate(-50%, -50%);
     pointer-events:none;
@@ -1018,23 +1017,33 @@
   }
 
   // Ajoute un avatar permanent devant le coffre (foule qui s'accumule au
-  // fil du jaillissement, palier epique) a l'emplacement `slot` (reserve au
-  // moment ou l'avatar a ete tire au sort dans spawnFountainCoin, pas a son
-  // atterrissage - voir crowdCount plus bas). Etale horizontalement en
-  // alternant les cotes, avec des rangees qui s'empilent vers l'arriere une
-  // fois une rangee pleine, pour former un vrai amas qui s'epaissit avec le
-  // temps plutot qu'une ligne qui s'etire a l'infini.
-  const CROWD_COLS = 9;
-  const CROWD_COL_SPACING_PX = 28;
-  const CROWD_ROW_SPACING_PERCENT = 6;
-  function spawnCrowdAvatar(slot){
+  // fil du jaillissement, palier epique). Placement aleatoire "naturel"
+  // plutot qu'une grille : chaque avatar tire une profondeur (0 = fond,
+  // 1 = premier plan) qui pilote a la fois sa position verticale, sa
+  // taille (plus petit/loin en arriere, plus grand/proche devant) et son
+  // z-index. Le z-index explicite est ce qui evite l'effet "photo de
+  // famille casse" - sans lui, un avatar arrive plus tard mais assigne
+  // plus en arriere se serait quand meme affiche AU-DESSUS de ceux du
+  // premier plan (ordre du DOM), les faisant paraitre superposes n'importe
+  // comment au lieu d'un vrai devant/derriere.
+  const CROWD_SPREAD_PX = 170;
+  const CROWD_BACK_TOP_PERCENT = 72;
+  const CROWD_FRONT_TOP_PERCENT = 96;
+  const CROWD_MIN_SIZE = 32;
+  const CROWD_MAX_SIZE = 66;
+  function spawnCrowdAvatar(){
     const el = document.createElement('img');
     el.className = 'avatar-crowd-member';
-    const col = slot % CROWD_COLS;
-    const row = Math.floor(slot / CROWD_COLS);
-    const centeredCol = col - (CROWD_COLS - 1) / 2;
-    el.style.left = `calc(50% + ${centeredCol * CROWD_COL_SPACING_PX}px)`;
-    el.style.top = (92 - row * CROWD_ROW_SPACING_PERCENT + (Math.random() * 3 - 1.5)) + '%';
+    const depth = Math.random(); // 0 = fond, 1 = premier plan
+    const top = CROWD_BACK_TOP_PERCENT + depth * (CROWD_FRONT_TOP_PERCENT - CROWD_BACK_TOP_PERCENT);
+    const baseSize = CROWD_MIN_SIZE + depth * (CROWD_MAX_SIZE - CROWD_MIN_SIZE);
+    const size = Math.max(20, baseSize + (Math.random() * 14 - 7)); // variation individuelle en plus de la profondeur
+    const xOffset = (Math.random() * 2 - 1) * CROWD_SPREAD_PX;
+    el.style.left = `calc(50% + ${xOffset}px)`;
+    el.style.top = top + '%';
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    el.style.zIndex = String(Math.round(top * 10)); // devant (top eleve) au-dessus, arriere en-dessous
     avatarCrowdEl.appendChild(el);
     registerDanceElement(el);
   }
@@ -1077,7 +1086,7 @@
   function spawnFountainCoin(fountain, reward){
     const dir = fountain.x < 50 ? -1 : 1;
     const isAvatar = reward === 'epique' && crowdCount < MAX_CROWD_SIZE && Math.random() < AVATAR_CHANCE;
-    const crowdSlot = isAvatar ? crowdCount++ : null; // reserve tout de suite, voir MAX_CROWD_SIZE
+    if(isAvatar) crowdCount++; // reserve tout de suite, voir MAX_CROWD_SIZE
     const frames = isAvatar ? manifest.avatarDanceFrames : manifest.coinSpinFrames;
     let frameIdx = Math.floor(Math.random() * frames.length);
 
@@ -1139,7 +1148,7 @@
     anim.addEventListener('finish', () => {
       if(isAvatar){
         unregisterDanceElement(el);
-        spawnCrowdAvatar(crowdSlot);
+        spawnCrowdAvatar();
       }else{
         clearInterval(frameTimer);
       }
