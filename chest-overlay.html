@@ -99,6 +99,32 @@
     100%{ width:420px; height:420px; opacity:0; }
   }
 
+  /* Motif qui tourne lentement derriere le coffre pendant tout le
+     jaillissement (playOngoing), quel que soit le palier - un cercle
+     magique en fond, decoratif, distinct des rayons/fontaines/foule (qui
+     eux varient selon le palier). Place avant .chest-sprite dans le DOM
+     pour rester derriere le coffre. */
+  .center-pattern{
+    position:absolute; left:50%; top:45%;
+    width:320px; height:320px;
+    transform:translate(-50%, -50%) rotate(0deg);
+    background-image:url('assets/chest/particles/magic_01.png');
+    background-size:contain;
+    background-repeat:no-repeat;
+    background-position:center;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.5s ease;
+  }
+  .center-pattern.visible{
+    opacity:0.55;
+    animation: center-pattern-spin 14s linear infinite;
+  }
+  @keyframes center-pattern-spin{
+    from{ transform:translate(-50%, -50%) rotate(0deg); }
+    to{ transform:translate(-50%, -50%) rotate(360deg); }
+  }
+
   /* Flash blanc plein ecran a l'instant precis de l'ouverture (frame 4 +
      classe .bursting, voir la fin de playOpening) - au-dessus de tout le
      reste (dernier enfant de .stage). */
@@ -409,6 +435,7 @@
   <div class="chest-wrap" id="chest-wrap">
     <div class="impact-flash" id="impact-flash"></div>
     <div class="burst"></div>
+    <div class="center-pattern" id="center-pattern"></div>
     <img class="chest-sprite" id="chest-sprite" alt="">
     <div class="chest-ray chest-ray-1" id="chest-ray-1"></div>
     <div class="chest-ray chest-ray-2" id="chest-ray-2"></div>
@@ -479,6 +506,7 @@
   const firework = document.getElementById('firework');
   const burstWrap = document.getElementById('burst-wrap');
   const chestRayEls = [1, 2, 3].map((n) => document.getElementById(`chest-ray-${n}`));
+  const centerPattern = document.getElementById('center-pattern');
   const avatarCrowdEl = document.getElementById('avatar-crowd');
   const rewardCard = document.getElementById('reward-card');
   const rewardCardIcon = document.getElementById('reward-card-icon');
@@ -997,6 +1025,7 @@
   // --- Phase 2 : jaillissement decoratif d'items, cale sur ongoing-<palier>.mp3 ---
   async function playOngoing(reward, preloadedAudio){
     burstWrap.classList.add('visible');
+    centerPattern.classList.add('visible'); // meme effet quel que soit le palier
     const stopRayCycle = startRayCycle();
     const stopCoinFountain = startCoinFountain(reward);
     const { done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
@@ -1004,6 +1033,7 @@
     await done;
     clearInterval(spawnTimer);
     stopCoinFountain();
+    centerPattern.classList.remove('visible'); // fini avec le jaillissement, pas pendant la revelation
     // Les 3 rayons restent affiches ensemble (pas de retour a "aucun
     // rayon") pendant toute la revelation - voir playEnding.
     stopRayCycle();
@@ -1527,6 +1557,7 @@
     if(stopCoinFountainFn) stopCoinFountainFn();
     resetAvatarCrowd();
     resetRewardCardAvatar();
+    centerPattern.classList.remove('visible');
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -1569,6 +1600,7 @@
       rewardVideo.classList.remove('visible');
       startRayCycle(); // meme comportement que le vrai playOngoing
       startCoinFountain('epique'); // palier le plus riche, pour previsualiser tous les effets
+      centerPattern.classList.add('visible');
       triggerOpenFlash();
     },
     reveal(){
