@@ -313,6 +313,25 @@
   }
   .reward-card.visible .reward-card-brush{ opacity:1; transform:scale(1); }
   .reward-card-icon{ width:52px; height:52px; margin-bottom:2px; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.6)); }
+  /* Avatar Twitch du viewer recompense (voir renderRewardCardAvatar) - pris
+     dans avatar_customizations (meme systeme que twitch-chat-ink.html) si
+     ce viewer en a un, sinon un avatar fixe deduit du hash de son login
+     (pickFallbackAvatar). Affiche a la place de .reward-card-icon quand
+     disponible ; l'icone de palier reste le filet de secours si Supabase
+     n'est pas joignable. */
+  .reward-card-avatar{
+    position:relative;
+    width:64px; height:64px;
+    margin-bottom:2px;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,0.6));
+    display:none;
+  }
+  .reward-card-avatar.visible{ display:block; }
+  .reward-card-avatar img{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:contain;
+  }
   .reward-card-tier,
   .reward-card-login{
     font-family:'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
@@ -422,6 +441,7 @@
     <div class="reward-card-inner">
       <div class="reward-card-brush" id="reward-card-brush"></div>
       <div class="reward-card-content" id="reward-card-content">
+        <div class="reward-card-avatar" id="reward-card-avatar"></div>
         <img class="reward-card-icon" id="reward-card-icon" alt="">
         <div class="reward-card-tier" id="reward-card-tier">Epique</div>
         <div class="reward-card-login" id="reward-card-login">pseudo</div>
@@ -435,6 +455,7 @@
 </div>
 
 <script src="assets/chest-manifest.js"></script>
+<script src="assets/parts-manifest.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
@@ -478,6 +499,7 @@
   const resultIcon = document.getElementById('result-icon');
   const rewardCard = document.getElementById('reward-card');
   const rewardCardIcon = document.getElementById('reward-card-icon');
+  const rewardCardAvatar = document.getElementById('reward-card-avatar');
   const rewardCardTier = document.getElementById('reward-card-tier');
   const rewardCardLogin = document.getElementById('reward-card-login');
   const rewardCardBrush = document.getElementById('reward-card-brush');
@@ -873,6 +895,12 @@
     chestWrap.classList.remove('bursting', 'idle-bob');
     chestWrap.classList.add('visible');
     resetAvatarCrowd(); // repart d'une foule vide pour ce nouveau tirage
+    resetRewardCardAvatar();
+    // Lance la recherche de l'avatar du viewer des maintenant (login connu
+    // tout de suite) : elle a ainsi toute la duree de l'ouverture/du
+    // jaillissement pour repondre, plutot que d'ajouter un temps d'attente
+    // pile au moment de la revelation.
+    const avatarPromise = prefetchRewardAvatar(ev.twitch_login);
 
     // Precharge les 3 pistes tout de suite (pendant que la boucle d'attente
     // termine son tour) : chacune a ainsi toute la duree necessaire pour
@@ -893,7 +921,7 @@
 
     await playOpening(reward, openingAudio);
     await playOngoing(reward, ongoingAudio);
-    await playEnding(ev, reward, endingAudio);
+    await playEnding(ev, reward, endingAudio, avatarPromise);
 
     chestWrap.classList.remove('visible', 'bursting');
   }
@@ -999,7 +1027,7 @@
   }
 
   // --- Phase 3 : revelation de la vraie recompense, calee sur ending-<palier>.mp3 ---
-  async function playEnding(ev, reward, preloadedAudio){
+  async function playEnding(ev, reward, preloadedAudio, avatarPromise){
     const { audio, done } = playTrack(preloadedAudio, { overlapMs: SETTINGS.ongoingEndingOverlapMs[reward] });
     triggerCrowdCelebration();
 
@@ -1015,10 +1043,15 @@
       audio.pause(); forgetAudio(audio); // la cinematique a son propre son
       usedVideo = await tryPlayRewardVideo(videoPath);
     }else{
+      // Icone de palier posee tout de suite comme filet de secours ; si
+      // l'avatar du viewer est disponible (voir prefetchRewardAvatar dans
+      // playChestSequence), renderRewardCardAvatar la remplace juste avant
+      // de peindre la brush.
       rewardCardIcon.src = manifest.rewardIcon[reward];
       rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
       rewardCardLogin.textContent = ev.twitch_login;
       await waitForRewardCardIcon();
+      if(avatarPromise) await renderRewardCardAvatar(avatarPromise);
       applyRewardCardBrush(); // recadre une brush aleatoire sur la taille reelle du contenu
       rewardCard.classList.add('visible');
       await done;
@@ -1111,6 +1144,16 @@
       el.remove();
     });
     crowdCount = 0;
+  }
+
+  // Remet la carte de recompense sur l'icone de palier par defaut - a
+  // appeler a chaque nouveau tirage (playChestSequence) et dans
+  // forceStopEverything, sinon l'avatar du tirage precedent resterait
+  // affiche le temps que la nouvelle recherche Supabase reponde.
+  function resetRewardCardAvatar(){
+    rewardCardAvatar.innerHTML = '';
+    rewardCardAvatar.classList.remove('visible');
+    rewardCardIcon.style.display = '';
   }
 
   // Au moment de la revelation : chaque avatar quitte l'horloge de danse
@@ -1281,6 +1324,81 @@
     });
   }
 
+  // ---------------------------- Avatar Twitch du viewer recompense ----------------------------
+  // Meme systeme que twitch-chat-ink.html : avatar_customizations (edite via
+  // avatar-editor.html) si ce viewer en a un, sinon un avatar fixe deduit du
+  // hash de son login (stable, contrairement au display-name qui peut
+  // varier en casse/unicode) - jamais les deux a la fois, et jamais rien
+  // (l'icone de palier reste le filet de secours si Supabase est injoignable).
+  const REWARD_AVATAR_FALLBACK_IMAGES = [
+    'assets/avatar-01.png', 'assets/avatar-02.png', 'assets/avatar-03.png', 'assets/avatar-04.png',
+  ];
+  function pickRewardFallbackAvatar(username){
+    let hash = 0;
+    for(let i = 0; i < username.length; i++){
+      hash = (hash * 31 + username.charCodeAt(i)) | 0;
+    }
+    return REWARD_AVATAR_FALLBACK_IMAGES[Math.abs(hash) % REWARD_AVATAR_FALLBACK_IMAGES.length];
+  }
+
+  function fetchRewardAvatarConfig(username){
+    if(!sb) return Promise.resolve(null);
+    return sb
+      .from('avatar_customizations')
+      .select('*')
+      .eq('twitch_login', username)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if(error){ console.error('[chest-overlay] avatar du viewer recompense:', error); return null; }
+        return data || null;
+      })
+      .catch((err) => { console.error('[chest-overlay] avatar du viewer recompense:', err); return null; });
+  }
+
+  function waitForImages(container){
+    const imgs = Array.from(container.querySelectorAll('img'));
+    if(imgs.length === 0) return Promise.resolve();
+    return Promise.all(imgs.map((img) => img.complete ? Promise.resolve() : new Promise((res) => {
+      img.addEventListener('load', res, { once: true });
+      img.addEventListener('error', res, { once: true });
+    })));
+  }
+
+  // Prepare (mais n'affiche pas encore) l'avatar du viewer pour la carte de
+  // recompense - a appeler des le debut de playChestSequence (le login est
+  // connu tout de suite) pour que la requete Supabase ait toute la duree de
+  // l'ouverture/du jaillissement pour repondre, plutot que d'ajouter un
+  // temps d'attente pile au moment de la revelation.
+  function prefetchRewardAvatar(username){
+    return fetchRewardAvatarConfig(username).then((cfg) => ({ username, cfg }));
+  }
+
+  // Rend l'avatar (deja recupere par prefetchRewardAvatar) dans
+  // rewardCardAvatar et bascule l'affichage icone de palier -> avatar.
+  // Retourne une promesse resolue une fois les images chargees (mesure
+  // fiable pour applyRewardCardBrush juste apres).
+  async function renderRewardCardAvatar(avatarPromise){
+    const { username, cfg } = await avatarPromise;
+    rewardCardAvatar.innerHTML = '';
+    const partsManifest = window.AVATAR_PARTS_MANIFEST;
+    if(cfg && partsManifest){
+      partsManifest.renderOrder.forEach((cat) => {
+        const idx = cfg[cat];
+        if(!idx) return;
+        const img = document.createElement('img');
+        img.src = partsManifest.partPath(cat, idx);
+        rewardCardAvatar.appendChild(img);
+      });
+    }else{
+      const img = document.createElement('img');
+      img.src = pickRewardFallbackAvatar(username);
+      rewardCardAvatar.appendChild(img);
+    }
+    await waitForImages(rewardCardAvatar);
+    rewardCardIcon.style.display = 'none';
+    rewardCardAvatar.classList.add('visible');
+  }
+
   // Calcule un background-size/position en px tels que la zone reellement
   // encree du PNG (REWARD_BRUSH_INK_BOUNDS) recouvre exactement contentW x
   // contentH sans deborder sur le padding autour - identique a
@@ -1419,6 +1537,7 @@
     if(stopRayCycleFn) stopRayCycleFn();
     if(stopCoinFountainFn) stopCoinFountainFn();
     resetAvatarCrowd();
+    resetRewardCardAvatar();
     activeAudios.forEach((audio) => audio.pause());
     activeAudios.clear();
   }
@@ -1479,7 +1598,9 @@
       rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
       rewardCardLogin.textContent = 'ViewerTest';
       rewardVideo.classList.remove('visible');
-      waitForRewardCardIcon().then(applyRewardCardBrush);
+      waitForRewardCardIcon()
+        .then(() => renderRewardCardAvatar(prefetchRewardAvatar('ViewerTest')))
+        .then(applyRewardCardBrush);
       rewardCard.classList.add('visible');
       // forceStopEverything() (au tout debut de cet etat) vide toujours la
       // foule - en fabrique une petite ici pour pouvoir previsualiser le
