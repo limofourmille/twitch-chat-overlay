@@ -1043,6 +1043,15 @@
     rewardCard.classList.remove('visible');
     if(usedVideo){ rewardVideo.classList.remove('visible'); rewardVideo.removeAttribute('src'); }
     burstWrap.classList.remove('visible');
+    // La foule (et l'avatar de la carte) doivent disparaitre ici, a la
+    // fermeture reelle - resetAvatarCrowd() n'etait sinon appele qu'au
+    // debut du PROCHAIN tirage declenche (playChestSequence), jamais entre
+    // temps. Comme chest-wrap redevient "visible" pour afficher un
+    // eventuel prochain coffre en attente (showWaitingChest), la foule
+    // laissee dans le DOM reapparaissait avec lui avant meme d'avoir ete
+    // ouvert.
+    resetAvatarCrowd();
+    resetRewardCardAvatar();
   }
 
   function spawnFloatingIcon(){
