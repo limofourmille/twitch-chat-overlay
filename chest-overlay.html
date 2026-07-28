@@ -1048,7 +1048,7 @@
       // playChestSequence), renderRewardCardAvatar la remplace juste avant
       // de peindre la brush.
       rewardCardIcon.src = manifest.rewardIcon[reward];
-      rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
+      rewardCardTier.textContent = eventLabel(ev);
       rewardCardLogin.textContent = ev.twitch_login;
       await waitForRewardCardIcon();
       if(avatarPromise) await renderRewardCardAvatar(avatarPromise);
@@ -1487,6 +1487,16 @@
     return null;
   }
 
+  // Libelle affiche sur la carte de recompense : l'evenement qui a
+  // declenche le coffre ("Follow"/"Sub T1/T2/T3") plutot que la rarete du
+  // palier (Commun/Rare/Epique) - ev.tier vaut '1000'/'2000'/'3000' pour un
+  // sub (voir chest_events/twitch-eventsub), null pour un follow.
+  const SUB_TIER_LABELS = { '1000': 'Sub T1', '2000': 'Sub T2', '3000': 'Sub T3' };
+  function eventLabel(ev){
+    if(ev.event_type === 'follow') return 'Follow';
+    return SUB_TIER_LABELS[ev.tier] || 'Sub';
+  }
+
   async function loadInitialPending(){
     if(!sb) return;
     const { data, error } = await sb
@@ -1595,7 +1605,7 @@
       void resultIcon.offsetWidth; // relance l'animation CSS
       resultIcon.classList.add('rising');
       rewardCardIcon.src = manifest.rewardIcon[reward];
-      rewardCardTier.textContent = manifest.rewardLabels[reward] || reward;
+      rewardCardTier.textContent = eventLabel({ event_type: 'subscribe', tier: '3000' });
       rewardCardLogin.textContent = 'ViewerTest';
       rewardVideo.classList.remove('visible');
       waitForRewardCardIcon()
