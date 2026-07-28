@@ -100,25 +100,33 @@
   }
 
   /* Motif qui tourne lentement derriere le coffre pendant tout le
-     jaillissement (playOngoing), quel que soit le palier - un cercle
-     magique en fond, decoratif, distinct des rayons/fontaines/foule (qui
-     eux varient selon le palier). Place avant .chest-sprite dans le DOM
-     pour rester derriere le coffre. */
+     jaillissement (playOngoing), quel que soit le palier - un sunburst en
+     fond, decoratif, distinct des rayons/fontaines/foule (qui eux varient
+     selon le palier). Place avant .chest-sprite dans le DOM pour rester
+     derriere le coffre. */
   .center-pattern{
     position:absolute; left:50%; top:45%;
-    width:320px; height:320px;
+    width:90vh; height:90vh;
     transform:translate(-50%, -50%) rotate(0deg);
-    background-image:url('assets/chest/particles/magic_01.png');
-    background-size:contain;
-    background-repeat:no-repeat;
-    background-position:center;
+    border-radius:50%;
+    /* Bandes en eventail (façon sunburst) dessinees en CSS pur, pas
+       besoin d'asset - 24 bandes de 15deg, alternant clair/quasi-transparent
+       pour rester dans la meme palette noir et blanc que le reste. */
+    background:repeating-conic-gradient(
+      rgba(255,255,255,0.32) 0deg 15deg,
+      rgba(255,255,255,0.04) 15deg 30deg
+    );
+    /* Estompe les bords du disque au lieu d'un cercle a bord net, pour que
+       ca se fonde dans le fond plutot que de ressembler a une pastille. */
+    -webkit-mask-image: radial-gradient(circle, black 0%, black 35%, transparent 72%);
+            mask-image: radial-gradient(circle, black 0%, black 35%, transparent 72%);
     opacity:0;
     pointer-events:none;
     transition:opacity 0.5s ease;
   }
   .center-pattern.visible{
     opacity:0.55;
-    animation: center-pattern-spin 14s linear infinite;
+    animation: center-pattern-spin 18s linear infinite;
   }
   @keyframes center-pattern-spin{
     from{ transform:translate(-50%, -50%) rotate(0deg); }
