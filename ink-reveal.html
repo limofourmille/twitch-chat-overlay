@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ink Reveal - OBS Browser Source</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent; /* IMPORTANT: OBS gère la transparence automatiquement si "Shutdown source when not visible" est bien configuré et le fond CSS transparent */
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;   /* filet de sécurité : le canvas couvre toute la fenêtre même si le JS de resize échoue */
+    height: 100vh;
+  }
+  /* Petit HUD de debug, visible seulement dans un navigateur normal, PAS dans OBS
+     (OBS n'exécute pas les clics, donc ça ne gêne jamais le stream) */
+  #hud {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    font-family: sans-serif;
+    font-size: 12px;
+    color: #0f0;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 10px;
+    border-radius: 6px;
+    z-index: 10;
+    user-select: none;
+    cursor: pointer;
+  }
+  #hud.hidden {
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+<div id="hud" class="hidden">Clique sur la page pour ajouter une tache — touche R pour tout réinitialiser — touche D pour masquer/afficher ce HUD</div>
+
+<script>
+/* =========================================================
+   CONFIGURATION — à adapter à ton besoin
+   ========================================================= */
+const CONFIG = {
+  // Image du décor à révéler. Remplace par le chemin de ton fichier
+  // (mets l'image dans le même dossier que ce fichier HTML)
+  // Laisse vide ("") pour un décor de test généré localement (fonctionne hors-ligne)
+  decorImageSrc: "", // ex: "mon-decor.png"
+
+  // --- Taille des taches ---
+  // Rayon final de chaque tache, tiré aléatoirement entre ces deux valeurs (en px).
+  // C'est ce qui garantit qu'une tache s'arrête et NE recouvre PAS tout l'écran.
+  minBlobRadius: 140,
+  maxBlobRadius: 340,
+
+  // Vitesse de croissance (px / frame, ~60fps). Variation aléatoire +/-40% par tache.
+  growthSpeed: 3.2,
+
+  // Durée de croissance de chaque tache, en secondes (tirée aléatoirement entre les deux).
+  // La tache grandit vite au début puis ralentit progressivement (courbe "ease-out")
+  // jusqu'à atteindre son rayon final pile à la fin de cette durée.
+  growthDurationMin: 6,
+  growthDurationMax: 11,
+
+  // --- Forme / aléatoire ---
+  edgeNoiseAmplitude: 0.35, // en fraction du rayon (0.35 = bord irrégulier à +/-35%)
+  edgeNoiseFrequency: 3,    // nombre d'ondulations sur le pourtour
+  minTendrils: 3,           // nombre de "coulures" fines partant de la tache
+  maxTendrils: 7,
+
+  // --- Opacité / texture papier ---
+  coreOpacity: 0.92,  // opacité au centre de la tache — nettement plus dense qu'à l'extérieur
+  edgeOpacity: 0.08,  // opacité résiduelle vers le bord avant le flou — nettement plus légère
+  mottleCount: 10,     // nombre de petites zones d'absorption inégale par tache (jamais au centre)
+  mottleStrength: 0.3, // à quel point ces zones éclaircissent localement la tache
+
+  // Contour noir qui apparaît au début de la croissance (comme le trait net d'une
+  // tache d'encre fraîche sur du papier) puis s'estompe progressivement jusqu'à
+  // disparaître complètement au moment où la tache finit de grandir.
+  outlineMaxOpacity: 0.55,
+  outlineWidthFactor: 0.035, // épaisseur du contour, en fraction du rayon de la tache
+
+  // Flou appliqué au masque pour un bord d'encre doux et diffus
+  blurPx: 10,
+
+  // --- Coups de pinceau ---
+  // Probabilité qu'une tache génère aussi un "trait" d'encre (coup de pinceau)
+  // partant dans une direction aléatoire, avec de petites taches satellites le long.
+  strokeChance: 0.3,
+  strokeSatellitesMin: 2,
+  strokeSatellitesMax: 4,
+
+  // --- Intégration Heat (déclenchement par clic viewer, SANS SAMMI) ---
+  // Heat est l'extension Twitch gratuite (par Scott Garner) qui capte les clics
+  // des viewers directement sur la vidéo. Son protocole est public et documenté :
+  // https://github.com/scottgarner/Heat/wiki/Custom-Experiences
+  // Cette page s'y connecte directement, donc SAMMI n'est plus nécessaire pour
+  // le déclenchement par clic (utile si tu veux garder SAMMI pour autre chose,
+  // ou si tu préfères éviter Click Map).
+  heatEnabled: false,     // passe à true pour activer, et renseigne ton ID ci-dessous
+  heatChannelId: null     // ton ID de chaîne Twitch NUMÉRIQUE (pas le pseudo)
+};
+
+/* =========================================================
+   MOTEUR — pas besoin d'y toucher normalement
+   ========================================================= */
+// Paramètres d'URL (utile pour piloter plusieurs Browser Sources OBS avec ce même
+// fichier) : ?decor=chemin/image.png pour changer le décor sans dupliquer le fichier,
+// ?maskonly=1 pour n'afficher que le masque d'encre brut (blanc sur transparent),
+// utile pour piloter une autre source via le filtre "Dynamic Mask" de StreamFX.
+const urlParams = new URLSearchParams(location.search);
+if (urlParams.get('decor')) CONFIG.decorImageSrc = urlParams.get('decor');
+const MASK_ONLY = urlParams.get('maskonly') === '1';
+// HUD de debug (bas gauche) : caché par défaut, affichable avec ?debug=1 dans l'URL
+// ou en appuyant sur la touche D une fois la page ouverte dans un navigateur normal.
+const hudEl = document.getElementById('hud');
+let hudVisible = urlParams.get('debug') === '1';
+function applyHudVisibility() {
+  if (hudEl) hudEl.classList.toggle('hidden', !hudVisible);
+}
+applyHudVisibility();
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+
+let W, H, DPR;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  maskCanvas.width = W;
+  maskCanvas.height = H;
+  resizeBaked(W, H);
+  redrawStatic();
+}
+window.addEventListener('resize', resize);
+
+// Canvas hors-écran pour le masque cumulé (alpha variable = opacité de l'encre)
+const maskCanvas = document.createElement('canvas');
+const maskCtx = maskCanvas.getContext('2d');
+
+// Couche "figée" : contient le rendu déjà calculé de toutes les taches TERMINÉES.
+// Une fois une tache finie de grandir, elle est dessinée une seule fois ici puis
+// retirée de la liste des taches actives — elle n'est donc plus jamais recalculée,
+// ce qui garde le coût par frame constant même après des dizaines de clics.
+let bakedCanvas = document.createElement('canvas');
+let bakedCtx = bakedCanvas.getContext('2d');
+
+function resizeBaked(newW, newH) {
+  const old = bakedCanvas;
+  const fresh = document.createElement('canvas');
+  fresh.width = newW;
+  fresh.height = newH;
+  const freshCtx = fresh.getContext('2d');
+  if (old.width > 0 && old.height > 0) {
+    freshCtx.drawImage(old, 0, 0); // préserve le contenu déjà figé lors d'un redimensionnement
+  }
+  bakedCanvas = fresh;
+  bakedCtx = freshCtx;
+}
+
+// Image du décor
+const decorImg = new Image();
+let decorLoaded = false;
+decorImg.onload = () => { decorLoaded = true; redrawStatic(); };
+
+function generateFallbackDecor(message) {
+  // Décor de test généré localement (dégradé + texte), pour que ça marche
+  // sans connexion internet, sans problème de CORS, et sans dépendre d'un fichier externe.
+  const tmp = document.createElement('canvas');
+  tmp.width = 1600; tmp.height = 900;
+  const tctx = tmp.getContext('2d');
+  const grad = tctx.createLinearGradient(0, 0, 1600, 900);
+  grad.addColorStop(0, "#2b3a67");
+  grad.addColorStop(1, "#c94277");
+  tctx.fillStyle = grad;
+  tctx.fillRect(0, 0, 1600, 900);
+  tctx.fillStyle = "rgba(255,255,255,0.9)";
+  tctx.font = "bold 50px sans-serif";
+  tctx.textAlign = "center";
+  tctx.fillText(message, 800, 450);
+  tctx.font = "26px sans-serif";
+  tctx.fillText("(vérifie le chemin de decorImageSrc)", 800, 505);
+  decorImg.src = tmp.toDataURL(); // data: URL locale, jamais besoin de crossOrigin ici
+}
+
+if (CONFIG.decorImageSrc) {
+  // crossOrigin uniquement nécessaire pour une image externe/distante
+  decorImg.crossOrigin = "anonymous";
+  // Si l'image personnalisée échoue à charger (mauvais chemin, fichier absent...),
+  // on retombe automatiquement sur le décor de test plutôt que de laisser un écran vide.
+  decorImg.onerror = () => {
+    const hud = document.getElementById('hud');
+    if (hud) hud.textContent = `⚠ Image "${CONFIG.decorImageSrc}" introuvable — décor de secours utilisé`;
+    decorImg.onerror = null;
+    decorImg.crossOrigin = null;
+    generateFallbackDecor("Image introuvable : " + CONFIG.decorImageSrc);
+  };
+  decorImg.src = CONFIG.decorImageSrc;
+} else {
+  generateFallbackDecor("Clique pour ajouter une tache");
+}
+
+function rand(min, max) { return min + Math.random() * (max - min); }
+
+class InkBlob {
+  constructor(x, y, forcedTargetRadius = null) {
+    this.x = x;
+    this.y = y;
+    this.radius = 0;
+    this.targetRadius = forcedTargetRadius !== null ? forcedTargetRadius : rand(CONFIG.minBlobRadius, CONFIG.maxBlobRadius);
+    this.age = 0; // temps écoulé depuis la naissance de la tache, en frames-équivalent (~60fps)
+    this.duration = rand(CONFIG.growthDurationMin, CONFIG.growthDurationMax) * 60; // secondes -> frames
+    this.done = false;
+
+    // Forme non-circulaire et légèrement pivotée, pour casser la symétrie
+    this.scaleX = rand(0.75, 1.3);
+    this.scaleY = rand(0.75, 1.3);
+    this.rotation = rand(0, Math.PI * 2);
+
+    // Bruit multi-octave pour un contour irrégulier et crédible
+    this.points = 40;
+    this.noisePhases = [rand(0, 1000), rand(0, 1000), rand(0, 1000)];
+
+    // Coulures fines partant du corps principal de la tache
+    const tendrilCount = Math.floor(rand(CONFIG.minTendrils, CONFIG.maxTendrils + 1));
+    this.tendrils = Array.from({ length: tendrilCount }, () => ({
+      angle: rand(0, Math.PI * 2),
+      lengthFactor: rand(0.3, 1.1),
+      widthFactor: rand(0.12, 0.28),
+      curve: rand(-0.5, 0.5)
+    }));
+
+    // Zones d'absorption inégale (le papier ne boit pas l'encre uniformément).
+    // On les garde loin du centre (dist entre 0.4 et 0.95) pour ne jamais créer
+    // de "trou" au milieu de la tache, là où l'encre doit rester la plus dense.
+    this.mottles = Array.from({ length: CONFIG.mottleCount }, () => ({
+      angle: rand(0, Math.PI * 2),
+      dist: rand(0.4, 0.95),
+      r: rand(0.1, 0.3),
+      alpha: rand(0.15, 1) * CONFIG.mottleStrength
+    }));
+
+    // Taille de la zone de rendu nécessaire pour cette tache (corps + coulures + rotation)
+    this.size = Math.ceil(this.targetRadius * 4.2);
+  }
+
+  edgeNoise(angle) {
+    const p = this.noisePhases;
+    return (
+      Math.sin(angle * CONFIG.edgeNoiseFrequency + p[0]) * 0.5 +
+      Math.sin(angle * CONFIG.edgeNoiseFrequency * 2.3 + p[1]) * 0.3 +
+      Math.sin(angle * CONFIG.edgeNoiseFrequency * 4.7 + p[2]) * 0.2
+    );
+  }
+
+  grow(dt) {
+    if (this.done) return;
+    this.age += dt;
+    const t = Math.min(1, Math.max(0, this.age / this.duration)); // t toujours dans [0,1]
+    // ease-out cubique : dérivée max au départ (croissance rapide), qui décroît
+    // progressivement jusqu'à s'annuler pile au moment où la tache atteint sa taille finale
+    const eased = 1 - Math.pow(1 - t, 3);
+    this.radius = Math.max(0, this.targetRadius * eased); // jamais négatif, même en cas d'imprécision flottante
+    if (t >= 1) {
+      this.radius = this.targetRadius;
+      this.done = true;
+    }
+  }
+
+  renderLocal(lctx) {
+    const c = this.size / 2;
+    lctx.save();
+    lctx.translate(c, c);
+    lctx.rotate(this.rotation);
+    lctx.scale(this.scaleX, this.scaleY);
+
+    const growProgress = this.radius / this.targetRadius;
+
+    // Corps principal : dégradé radial, jamais opaque à 100%
+    const grad = lctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(0.01, this.radius * 1.1));
+    grad.addColorStop(0, `rgba(255,255,255,${CONFIG.coreOpacity})`);
+    grad.addColorStop(0.65, `rgba(255,255,255,${CONFIG.coreOpacity * 0.75})`);
+    grad.addColorStop(1, `rgba(255,255,255,${CONFIG.edgeOpacity})`);
+    lctx.fillStyle = grad;
+    lctx.beginPath();
+    for (let i = 0; i <= this.points; i++) {
+      const angle = (i / this.points) * Math.PI * 2;
+      const noiseAmt = this.edgeNoise(angle) * CONFIG.edgeNoiseAmplitude * this.radius * Math.min(1, growProgress * 1.5);
+      const r = Math.max(1, this.radius + noiseAmt);
+      const px = Math.cos(angle) * r, py = Math.sin(angle) * r;
+      if (i === 0) lctx.moveTo(px, py); else lctx.lineTo(px, py);
+    }
+    lctx.closePath();
+    lctx.fill();
+
+    // Contour noir qui s'estompe avec la croissance : bien visible au début
+    // (comme le bord net d'une tache d'encre fraîche), invisible une fois la
+    // tache stabilisée. Réutilise le même tracé, pas besoin de le reconstruire.
+    const outlineAlpha = CONFIG.outlineMaxOpacity * (1 - Math.min(1, growProgress));
+    if (outlineAlpha > 0.01) {
+      lctx.lineWidth = Math.max(1, this.radius * CONFIG.outlineWidthFactor);
+      lctx.strokeStyle = `rgba(0,0,0,${outlineAlpha})`;
+      lctx.stroke();
+    }
+
+    // Coulures fines qui partent du bord
+    this.tendrils.forEach(t => {
+      const len = this.radius * t.lengthFactor;
+      if (len < 4) return;
+      const width = Math.max(1, this.radius * t.widthFactor);
+      lctx.save();
+      lctx.rotate(t.angle);
+      const tgrad = lctx.createLinearGradient(0, 0, this.radius * 0.3 + len, 0);
+      tgrad.addColorStop(0, `rgba(255,255,255,${CONFIG.coreOpacity * 0.7})`);
+      tgrad.addColorStop(1, `rgba(255,255,255,0)`);
+      lctx.fillStyle = tgrad;
+      lctx.beginPath();
+      lctx.moveTo(this.radius * 0.3, -width * 0.5);
+      lctx.quadraticCurveTo(this.radius * 0.3 + len * 0.5, t.curve * len, this.radius * 0.3 + len, 0);
+      lctx.quadraticCurveTo(this.radius * 0.3 + len * 0.5, t.curve * len, this.radius * 0.3, width * 0.5);
+      lctx.closePath();
+      lctx.fill();
+      lctx.restore();
+    });
+
+    // Absorption inégale du papier : on éclaircit localement certaines zones
+    // (limité à ce rendu, donc ça ne touche jamais les autres taches)
+    lctx.globalCompositeOperation = 'destination-out';
+    this.mottles.forEach(m => {
+      const mx = Math.cos(m.angle) * m.dist * this.radius;
+      const my = Math.sin(m.angle) * m.dist * this.radius;
+      const mr = Math.max(1, m.r * this.radius);
+      lctx.beginPath();
+      lctx.arc(mx, my, mr, 0, Math.PI * 2);
+      lctx.fillStyle = `rgba(0,0,0,${m.alpha})`;
+      lctx.fill();
+    });
+    lctx.globalCompositeOperation = 'source-over';
+
+    lctx.restore();
+  }
+
+  draw(mctx) {
+    ensureScratchSize(this.size, this.size);
+    scratchCtx.clearRect(0, 0, this.size, this.size);
+    this.renderLocal(scratchCtx);
+    mctx.drawImage(scratchCanvas, 0, 0, this.size, this.size, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+  }
+}
+
+// Canvas partagé unique, réutilisé pour le rendu de chaque tache (voir InkBlob.draw).
+// Il ne fait que grandir, jamais rétrécir : changer canvas.width/height force le
+// navigateur à réallouer la mémoire GPU, donc on évite de le faire à chaque tache
+// (ce qui arrivait avant dès que deux objets de tailles différentes se dessinaient
+// dans la même frame — tache, trait, satellites — et ralentissait sensiblement la page).
+const scratchCanvas = document.createElement('canvas');
+const scratchCtx = scratchCanvas.getContext('2d');
+function ensureScratchSize(w, h) {
+  const needW = Math.ceil(w), needH = Math.ceil(h);
+  if (scratchCanvas.width < needW) scratchCanvas.width = Math.max(scratchCanvas.width, needW);
+  if (scratchCanvas.height < needH) scratchCanvas.height = Math.max(scratchCanvas.height, needH);
+}
+
+// Un "coup de pinceau" : une courbe qui part du centre d'une tache, s'amincit et
+// s'estompe progressivement vers sa pointe. Suit la même interface (grow/done/draw)
+// que InkBlob pour s'intégrer directement dans la boucle d'animation existante.
+class InkStroke {
+  constructor(x, y, parentRadius) {
+    this.x = x;
+    this.y = y;
+    this.angle = rand(0, Math.PI * 2);
+    this.length = parentRadius * rand(2.2, 4.5);
+    // Courbure toujours marquée (jamais quasi-droite) : magnitude entre 0.5 et 1.1, sens aléatoire
+    this.curveAmount = rand(0.5, 1.1) * (Math.random() < 0.5 ? -1 : 1);
+    this.baseWidth = parentRadius * rand(0.3, 0.5);
+    this.age = 0;
+    this.duration = rand(CONFIG.growthDurationMin, CONFIG.growthDurationMax) * 60 * 0.7;
+    this.done = false;
+    this.progress = 0;
+
+    // Courbe de Bézier quadratique partant de (0,0), locale à la tache
+    const perp = this.angle + Math.PI / 2;
+    const midDist = this.length * 0.5;
+    this.cx = Math.cos(this.angle) * midDist + Math.cos(perp) * this.curveAmount * this.length * 0.5;
+    this.cy = Math.sin(this.angle) * midDist + Math.sin(perp) * this.curveAmount * this.length * 0.5;
+    this.ex = Math.cos(this.angle) * this.length;
+    this.ey = Math.sin(this.angle) * this.length;
+
+    // Boîte englobante locale (la courbe reste toujours dans l'enveloppe convexe
+    // des 3 points de contrôle pour une bézier quadratique)
+    const margin = this.baseWidth * 1.5 + 10;
+    const xs = [0, this.cx, this.ex], ys = [0, this.cy, this.ey];
+    const minX = Math.min(...xs) - margin, maxX = Math.max(...xs) + margin;
+    const minY = Math.min(...ys) - margin, maxY = Math.max(...ys) + margin;
+    this.boxW = maxX - minX;
+    this.boxH = maxY - minY;
+    this.originOffsetX = -minX; // où (0,0) tombe dans le canvas local
+    this.originOffsetY = -minY;
+  }
+
+  bezierPoint(t) {
+    const u = 1 - t;
+    return {
+      x: 2 * u * t * this.cx + t * t * this.ex,
+      y: 2 * u * t * this.cy + t * t * this.ey
+    };
+  }
+
+  // Direction perpendiculaire (normalisée) à la courbe au point t, utile pour
+  // décaler des éléments par rapport au trait tout en suivant sa direction locale
+  bezierPerp(t) {
+    const tx = 2 * (1 - t) * this.cx + 2 * t * (this.ex - this.cx);
+    const ty = 2 * (1 - t) * this.cy + 2 * t * (this.ey - this.cy);
+    const len = Math.hypot(tx, ty) || 1;
+    return { x: -ty / len, y: tx / len };
+  }
+
+  grow(dt) {
+    if (this.done) return;
+    this.age += dt;
+    const t = Math.min(1, Math.max(0, this.age / this.duration));
+    this.progress = 1 - Math.pow(1 - t, 3); // même courbe ease-out que les taches
+    if (t >= 1) { this.progress = 1; this.done = true; }
+  }
+
+  draw(mctx) {
+    const w = Math.max(1, Math.ceil(this.boxW));
+    const h = Math.max(1, Math.ceil(this.boxH));
+    ensureScratchSize(w, h);
+    const lctx = scratchCtx;
+    lctx.clearRect(0, 0, w, h);
+    lctx.save();
+    lctx.translate(this.originOffsetX, this.originOffsetY);
+
+    // Un seul "ruban" qui suit la courbe et s'amincit vers la pointe, rempli avec
+    // un unique dégradé le long du trait — au lieu d'un dégradé + cercle par segment
+    // (jusqu'à 28 par frame), bien plus coûteux et inutile car le flou global de
+    // compositeFrame() adoucit déjà les bords.
+    const steps = 16;
+    const topEdge = [];
+    const bottomEdge = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = (i / steps) * this.progress;
+      const p = this.bezierPoint(t);
+      const perp = this.bezierPerp(t);
+      const taper = Math.pow(1 - t, 1.4); // s'amincit vers la pointe
+      const halfWidth = Math.max(0.5, this.baseWidth * 0.5 * taper);
+      topEdge.push({ x: p.x + perp.x * halfWidth, y: p.y + perp.y * halfWidth });
+      bottomEdge.push({ x: p.x - perp.x * halfWidth, y: p.y - perp.y * halfWidth });
+    }
+
+    if (topEdge.length > 1) {
+      lctx.beginPath();
+      lctx.moveTo(topEdge[0].x, topEdge[0].y);
+      for (let i = 1; i < topEdge.length; i++) lctx.lineTo(topEdge[i].x, topEdge[i].y);
+      for (let i = bottomEdge.length - 1; i >= 0; i--) lctx.lineTo(bottomEdge[i].x, bottomEdge[i].y);
+      lctx.closePath();
+
+      const startP = this.bezierPoint(0);
+      const endP = this.bezierPoint(this.progress);
+      const grad = lctx.createLinearGradient(startP.x, startP.y, endP.x, endP.y);
+      grad.addColorStop(0, `rgba(255,255,255,${Math.max(0, CONFIG.coreOpacity * 0.75)})`);
+      grad.addColorStop(1, `rgba(255,255,255,0)`);
+      lctx.fillStyle = grad;
+      lctx.fill();
+    }
+
+    lctx.restore();
+
+    mctx.drawImage(scratchCanvas, 0, 0, w, h, this.x - this.originOffsetX, this.y - this.originOffsetY, w, h);
+  }
+}
+
+let blobs = [];
+let rafId = null;
+let lastTime = 0;
+
+function compositeFrame() {
+  // 1. Repartir de la couche déjà figée (quasi gratuit : une simple copie bitmap),
+  //    puis ne dessiner par-dessus que les taches ENCORE en croissance.
+  maskCtx.clearRect(0, 0, W, H);
+  maskCtx.drawImage(bakedCanvas, 0, 0);
+  blobs.forEach(b => b.draw(maskCtx));
+
+  // 2. Flouter le masque pour un bord d'encre doux (l'alpha reste variable,
+  //    ce n'est pas un simple noir/blanc binaire)
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.filter = `blur(${CONFIG.blurPx}px)`;
+  ctx.drawImage(maskCanvas, 0, 0, W, H);
+  ctx.restore();
+
+  if (MASK_ONLY) {
+    // Mode masque brut : on s'arrête ici. Le canvas contient la forme d'encre
+    // (blanc, alpha variable) sur fond transparent — exploitable tel quel comme
+    // source de masque pour un filtre externe (ex: Dynamic Mask de StreamFX)
+    // appliqué à n'importe quelle autre source OBS (webcam, capture de jeu...).
+    return;
+  }
+
+  // 3. Le décor n'apparaît qu'à hauteur de l'alpha du masque à cet endroit
+  //    (donc opacité variable, pas 100% partout dans la tache)
+  ctx.globalCompositeOperation = "source-in";
+  if (decorLoaded && decorImg.naturalWidth > 0) {
+    const ir = decorImg.width / decorImg.height;
+    const cr = W / H;
+    let dw, dh, dx, dy;
+    if (ir > cr) { dh = H; dw = H * ir; dx = (W - dw) / 2; dy = 0; }
+    else { dw = W; dh = W / ir; dx = 0; dy = (H - dh) / 2; }
+    ctx.drawImage(decorImg, dx, dy, dw, dh);
+  } else {
+    // Filet de sécurité : si l'image n'a jamais chargé pour une raison quelconque,
+    // on affiche quand même une couleur unie à la place du décor plutôt que rien du tout.
+    ctx.fillStyle = "#c94277";
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function redrawStatic() {
+  // Redessine l'état actuel sans faire avancer la croissance (resize, chargement image...)
+  compositeFrame();
+}
+
+function loopFrame(now) {
+  const dt = Math.max(0, Math.min(3, (now - lastTime) / 16.67)); // normalisé ~60fps, jamais négatif, plafonné
+  lastTime = now;
+
+  let anyGrowing = false;
+  const stillActive = [];
+  blobs.forEach(b => {
+    b.grow(dt);
+    if (b.done) {
+      b.draw(bakedCtx); // dessinée une dernière fois, puis figée définitivement
+    } else {
+      stillActive.push(b);
+      anyGrowing = true;
+    }
+  });
+  blobs = stillActive;
+
+  compositeFrame();
+
+  if (anyGrowing) {
+    rafId = requestAnimationFrame(loopFrame);
+  } else {
+    rafId = null; // on arrête la boucle tant qu'aucune tache ne grandit (économie CPU)
+  }
+}
+
+function addBlobAt(x, y) {
+  const mainBlob = new InkBlob(x, y);
+  blobs.push(mainBlob);
+
+  // 30% de chance de générer un coup de pinceau (un trait qui s'amincit) avec
+  // de petites taches satellites disposées le long, comme des éclaboussures qui trainent
+  if (Math.random() < CONFIG.strokeChance) {
+    const stroke = new InkStroke(x, y, mainBlob.targetRadius);
+    blobs.push(stroke);
+
+    const satCount = Math.floor(rand(CONFIG.strokeSatellitesMin, CONFIG.strokeSatellitesMax + 1));
+    for (let i = 1; i <= satCount; i++) {
+      // Réparties le long du trait, en évitant le tout début et la toute pointe
+      const t = 0.25 + (i / (satCount + 1)) * 0.7;
+      const p = stroke.bezierPoint(t);
+      const falloff = Math.pow(1 - t, 1.1); // plus petites à mesure qu'on s'éloigne
+      // Plus grosses qu'avant (0.35 à 0.85 environ du rayon principal, au lieu de 0.15-0.55)
+      const satRadius = Math.max(18, mainBlob.targetRadius * (0.35 + 0.5 * falloff) * rand(0.85, 1.3));
+      // Décalées nettement de part et d'autre du trait (jamais pile dessus), mais pas assez
+      // pour s'en détacher visuellement : le décalage reste sous le rayon de la satellite,
+      // donc elle continue de chevaucher le trait.
+      const perp = stroke.bezierPerp(t);
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const offset = satRadius * rand(0.35, 0.75) * side;
+      const satX = x + p.x + perp.x * offset;
+      const satY = y + p.y + perp.y * offset;
+      const sat = new InkBlob(satX, satY, satRadius);
+      sat.age = -rand(5, 40); // léger décalage : elles apparaissent juste après la tache principale
+      blobs.push(sat);
+    }
+  }
+
+  const hud = document.getElementById('hud');
+  if (hud) hud.textContent = `Taches: ${blobs.length} | dernier clic: (${Math.round(x)}, ${Math.round(y)}) — touche R pour tout réinitialiser`;
+  if (rafId === null) {
+    lastTime = performance.now();
+    rafId = requestAnimationFrame(loopFrame);
+  }
+}
+
+function resetAll() {
+  blobs = [];
+  bakedCtx.clearRect(0, 0, bakedCanvas.width, bakedCanvas.height);
+  if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+  compositeFrame();
+}
+
+// Une tache ajoutée à chaque clic, à l'endroit cliqué
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  addBlobAt(e.clientX - rect.left, e.clientY - rect.top);
+});
+
+// Filet de sécurité : si un autre élément intercepte le clic avant qu'il n'atteigne
+// le canvas, on capte quand même le clic au niveau du document entier.
+document.addEventListener('click', (e) => {
+  if (e.target === canvas) return; // déjà géré ci-dessus, on évite le doublon
+  addBlobAt(e.clientX, e.clientY);
+});
+
+// Déclenchement externe possible (ex: depuis SAMMI via une page de contrôle,
+// ou dans la console si tu actives "Interact" sur la source dans OBS) :
+// addBlobAt(x, y) est exposée globalement.
+window.addInkBlobAt = addBlobAt;
+window.resetInkReveal = resetAll;
+window.addEventListener('message', (e) => {
+  if (!e.data) return;
+  if (e.data.type === 'add-ink-blob') addBlobAt(e.data.x ?? W / 2, e.data.y ?? H / 2);
+  if (e.data.type === 'reset-ink-reveal') resetAll();
+});
+
+// Touche R : tout réinitialiser (utile en test)
+// Touche I : ajoute une tache à une position aléatoire (utile pour un déclencheur
+// externe comme SAMMI Click Map -> Keyboard simulate press, qui simule un appui
+// clavier global sans coordonnées précises)
+window.addEventListener('keydown', (e) => {
+  const key = e.key.toLowerCase();
+  if (key === 'r') resetAll();
+  if (key === 'i') addBlobAt(rand(W * 0.2, W * 0.8), rand(H * 0.2, H * 0.8));
+  if (key === 'd') { hudVisible = !hudVisible; applyHudVisibility(); }
+});
+
+// --- Connexion Heat (clics des viewers, en direct) -------------------------
+// Connexion directe au serveur public de Heat, sans passer par SAMMI. Protocole
+// documenté ici : https://github.com/scottgarner/Heat/wiki/Custom-Experiences
+function updateHeatStatus(text) {
+  const hud = document.getElementById('hud');
+  if (hud) hud.textContent = `[Heat] ${text}`;
+  console.log('[Heat]', text);
+}
+
+function connectHeat() {
+  if (!CONFIG.heatEnabled) {
+    console.log('[Heat] désactivé (CONFIG.heatEnabled = false)');
+    return;
+  }
+  if (!CONFIG.heatChannelId) {
+    updateHeatStatus('ERREUR : heatChannelId manquant dans CONFIG');
+    return;
+  }
+
+  function connect() {
+    const url = `wss://heat-api.j38.net/channel/${CONFIG.heatChannelId}`;
+    updateHeatStatus(`connexion à ${url}...`);
+    const ws = new WebSocket(url);
+
+    ws.onopen = () => updateHeatStatus(`connecté (channel ${CONFIG.heatChannelId}), en attente de clics...`);
+
+    ws.onmessage = (message) => {
+      let data;
+      try { data = JSON.parse(message.data); } catch (e) {
+        console.warn('[Heat] message reçu mais illisible:', message.data);
+        return;
+      }
+      console.log('[Heat] message reçu:', data);
+      if (data.type !== 'click') return; // ignore les messages "system"
+
+      const px = parseFloat(data.x) * W; // x/y sont des coordonnées normalisées (0 à 1)
+      const py = parseFloat(data.y) * H;
+      if (Number.isFinite(px) && Number.isFinite(py)) {
+        updateHeatStatus(`clic reçu ! (${data.x}, ${data.y})`);
+        addBlobAt(px, py);
+      }
+    };
+
+    ws.onclose = () => {
+      updateHeatStatus('connexion fermée, nouvelle tentative dans 5s...');
+      setTimeout(connect, 5000);
+    };
+    ws.onerror = (e) => {
+      console.error('[Heat] erreur de connexion', e);
+      ws.close();
+    };
+  }
+
+  connect();
+}
+connectHeat();
+
+// Initialisation : appelée seulement maintenant que tout (blobs, compositeFrame,
+// decorImg...) est bien défini plus haut dans le script.
+resize();
+</script>
+
+</body>
+</html>
