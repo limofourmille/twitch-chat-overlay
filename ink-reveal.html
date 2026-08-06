@@ -110,6 +110,16 @@ const CONFIG = {
   heatChannelId: null     // ton ID de chaîne Twitch NUMÉRIQUE (pas le pseudo)
 };
 
+// --- Révélation automatique du reste de l'image -----------------------------
+// Une fois qu'une certaine fraction de l'image est révélée par les taches
+// d'encre, le reste de l'image se dévoile aussi (fondu), pour ne pas laisser
+// le viewer cliquer indéfiniment sur les derniers % difficiles à couvrir.
+// Mets autoRevealThreshold à 1 (ou plus) pour désactiver ce comportement.
+const AUTO_REVEAL = {
+  threshold: 0.8,     // fraction (0 à 1) de l'image révélée avant déclenchement
+  fadeDuration: 1.5   // durée du fondu final vers l'image complète, en secondes
+};
+
 /* =========================================================
    MOTEUR — pas besoin d'y toucher normalement
    ========================================================= */
@@ -152,6 +162,29 @@ window.addEventListener('resize', resize);
 // Canvas hors-écran pour le masque cumulé (alpha variable = opacité de l'encre)
 const maskCanvas = document.createElement('canvas');
 const maskCtx = maskCanvas.getContext('2d');
+
+// Mini-canvas basse résolution utilisé uniquement pour estimer, à moindre coût,
+// quelle fraction de l'image est révélée (voir AUTO_REVEAL / measureRevealedFraction).
+const SAMPLE_W = 64, SAMPLE_H = 36;
+const sampleCanvas = document.createElement('canvas');
+sampleCanvas.width = SAMPLE_W;
+sampleCanvas.height = SAMPLE_H;
+const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+
+function measureRevealedFraction() {
+  sampleCtx.clearRect(0, 0, SAMPLE_W, SAMPLE_H);
+  sampleCtx.drawImage(maskCanvas, 0, 0, SAMPLE_W, SAMPLE_H);
+  const data = sampleCtx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+  let covered = 0;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] > 20) covered++; // canal alpha : pixel considéré "révélé" au-delà d'un léger seuil
+  }
+  return covered / (SAMPLE_W * SAMPLE_H);
+}
+
+// État de la révélation automatique du reste de l'image (voir AUTO_REVEAL)
+let autoRevealTriggered = false;
+let autoRevealAlpha = 0;
 
 // Couche "figée" : contient le rendu déjà calculé de toutes les taches TERMINÉES.
 // Une fois une tache finie de grandir, elle est dessinée une seule fois ici puis
@@ -490,15 +523,35 @@ let blobs = [];
 let rafId = null;
 let lastTime = 0;
 
-function compositeFrame() {
-  // 1. Repartir de la couche déjà figée (quasi gratuit : une simple copie bitmap),
-  //    puis ne dessiner par-dessus que les taches ENCORE en croissance.
+function buildRawMask() {
+  // Repartir de la couche déjà figée (quasi gratuit : une simple copie bitmap),
+  // puis ne dessiner par-dessus que les taches ENCORE en croissance.
   maskCtx.clearRect(0, 0, W, H);
   maskCtx.drawImage(bakedCanvas, 0, 0);
   blobs.forEach(b => b.draw(maskCtx));
+}
 
-  // 2. Flouter le masque pour un bord d'encre doux (l'alpha reste variable,
-  //    ce n'est pas un simple noir/blanc binaire)
+function applyAutoRevealOverlay() {
+  // Une fois déclenché, ajoute un aplat blanc dont l'opacité augmente
+  // progressivement jusqu'à couvrir tout le canvas — le reste de l'image
+  // se dévoile alors indépendamment des taches d'encre.
+  if (autoRevealAlpha <= 0) return;
+  maskCtx.save();
+  maskCtx.globalAlpha = autoRevealAlpha;
+  maskCtx.fillStyle = "#fff";
+  maskCtx.fillRect(0, 0, W, H);
+  maskCtx.restore();
+}
+
+function compositeFrame() {
+  buildRawMask();
+  applyAutoRevealOverlay();
+  renderFromMask();
+}
+
+function renderFromMask() {
+  // Flouter le masque pour un bord d'encre doux (l'alpha reste variable,
+  // ce n'est pas un simple noir/blanc binaire)
   ctx.clearRect(0, 0, W, H);
   ctx.save();
   ctx.filter = `blur(${CONFIG.blurPx}px)`;
@@ -513,8 +566,8 @@ function compositeFrame() {
     return;
   }
 
-  // 3. Le décor n'apparaît qu'à hauteur de l'alpha du masque à cet endroit
-  //    (donc opacité variable, pas 100% partout dans la tache)
+  // Le décor n'apparaît qu'à hauteur de l'alpha du masque à cet endroit
+  // (donc opacité variable, pas 100% partout dans la tache)
   ctx.globalCompositeOperation = "source-in";
   if (decorLoaded && decorImg.naturalWidth > 0) {
     const ir = decorImg.width / decorImg.height;
@@ -554,9 +607,26 @@ function loopFrame(now) {
   });
   blobs = stillActive;
 
-  compositeFrame();
+  // Le masque brut doit être à jour AVANT de mesurer la fraction révélée
+  // (sinon on mesurerait l'état de la frame précédente).
+  buildRawMask();
 
-  if (anyGrowing) {
+  if (!MASK_ONLY && AUTO_REVEAL.threshold < 1) {
+    if (!autoRevealTriggered && measureRevealedFraction() >= AUTO_REVEAL.threshold) {
+      autoRevealTriggered = true;
+      const hud = document.getElementById('hud');
+      if (hud) hud.textContent = `${Math.round(AUTO_REVEAL.threshold * 100)}% révélé — le reste apparaît…`;
+    }
+    if (autoRevealTriggered && autoRevealAlpha < 1) {
+      autoRevealAlpha = Math.min(1, autoRevealAlpha + dt / (AUTO_REVEAL.fadeDuration * 60));
+    }
+  }
+
+  applyAutoRevealOverlay();
+  renderFromMask();
+
+  const stillFading = autoRevealTriggered && autoRevealAlpha < 1;
+  if (anyGrowing || stillFading) {
     rafId = requestAnimationFrame(loopFrame);
   } else {
     rafId = null; // on arrête la boucle tant qu'aucune tache ne grandit (économie CPU)
@@ -606,6 +676,8 @@ function addBlobAt(x, y) {
 function resetAll() {
   blobs = [];
   bakedCtx.clearRect(0, 0, bakedCanvas.width, bakedCanvas.height);
+  autoRevealTriggered = false;
+  autoRevealAlpha = 0;
   if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
   compositeFrame();
 }
