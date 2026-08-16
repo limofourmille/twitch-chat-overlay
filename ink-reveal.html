@@ -675,7 +675,7 @@ function loopFrame(now) {
   // (sinon on mesurerait l'état de la frame précédente).
   buildRawMask();
 
-  if (!MASK_ONLY && AUTO_REVEAL.threshold < 1) {
+  if (AUTO_REVEAL.threshold < 1) {
     if (!autoRevealTriggered && measureRevealedFraction() >= AUTO_REVEAL.threshold) {
       autoRevealTriggered = true;
       const hud = document.getElementById('hud');
