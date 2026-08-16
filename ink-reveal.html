@@ -39,11 +39,43 @@
   #hud.hidden {
     display: none;
   }
+  /* Invite à cliquer, au centre de l'écran — même police "manuscrite avec
+     contour noir" que le chat ink (twitch-chat-ink.html) pour rester cohérent
+     visuellement avec le reste de l'habillage. */
+  #cta {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', cursive;
+    font-weight: 700;
+    font-size: clamp(20px, 3vw, 40px);
+    color: #fff;
+    text-align: center;
+    text-shadow:
+      -2px -2px 0 black,  2px -2px 0 black,
+      -2px  2px 0 black,  2px  2px 0 black,
+      -2px  0   0 black,  2px  0   0 black,
+       0   -2px 0 black,  0    2px 0 black,
+       0 0 6px black;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  #cta.visible {
+    animation: cta-breathe 2.6s ease-in-out infinite;
+  }
+  @keyframes cta-breathe {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 1; }
+  }
 </style>
 </head>
 <body>
 
 <canvas id="scene"></canvas>
+<div id="cta" class="visible">cliquez pour interagir avec l'écran</div>
 <div id="hud" class="hidden">Clique sur la page pour ajouter une tache — touche R pour tout réinitialiser — touche D pour masquer/afficher ce HUD</div>
 
 <script>
@@ -127,8 +159,11 @@ const AUTO_REVEAL = {
 // fichier) : ?decor=chemin/image.png pour changer le décor sans dupliquer le fichier,
 // ?maskonly=1 pour n'afficher que le masque d'encre brut (blanc sur transparent),
 // utile pour piloter une autre source via le filtre "Dynamic Mask" de StreamFX.
+// ?heatChannel=123456789 permet de tester avec une autre chaîne (ex: un compte de
+// test) sans modifier CONFIG.heatChannelId dans le fichier.
 const urlParams = new URLSearchParams(location.search);
 if (urlParams.get('decor')) CONFIG.decorImageSrc = urlParams.get('decor');
+if (urlParams.get('heatChannel')) CONFIG.heatChannelId = urlParams.get('heatChannel');
 const MASK_ONLY = urlParams.get('maskonly') === '1';
 // HUD de debug (bas gauche) : caché par défaut, affichable avec ?debug=1 dans l'URL
 // ou en appuyant sur la touche D une fois la page ouverte dans un navigateur normal.
@@ -138,6 +173,35 @@ function applyHudVisibility() {
   if (hudEl) hudEl.classList.toggle('hidden', !hudVisible);
 }
 applyHudVisibility();
+
+// Invite "cliquez pour interagir avec l'écran" : visible par défaut (en mode
+// MASK_ONLY on la masque tout de suite, sinon elle polluerait le masque brut
+// utilisé par le filtre Dynamic Mask). Masquée définitivement une fois l'image
+// totalement révélée, et temporairement après chaque clic reçu via Heat.
+const ctaEl = document.getElementById('cta');
+let ctaSuppressed = false;
+let ctaCooldownTimer = null;
+function setCtaVisible(visible) {
+  if (ctaEl) ctaEl.classList.toggle('visible', visible);
+}
+if (MASK_ONLY) setCtaVisible(false);
+
+function suppressCtaForever() {
+  if (ctaSuppressed) return;
+  ctaSuppressed = true;
+  if (ctaCooldownTimer) { clearTimeout(ctaCooldownTimer); ctaCooldownTimer = null; }
+  setCtaVisible(false);
+}
+
+function hideCtaTemporarily(durationMs) {
+  if (ctaSuppressed || MASK_ONLY) return;
+  setCtaVisible(false);
+  if (ctaCooldownTimer) clearTimeout(ctaCooldownTimer);
+  ctaCooldownTimer = setTimeout(() => {
+    ctaCooldownTimer = null;
+    if (!ctaSuppressed) setCtaVisible(true);
+  }, durationMs);
+}
 
 const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
@@ -619,6 +683,7 @@ function loopFrame(now) {
     }
     if (autoRevealTriggered && autoRevealAlpha < 1) {
       autoRevealAlpha = Math.min(1, autoRevealAlpha + dt / (AUTO_REVEAL.fadeDuration * 60));
+      if (autoRevealAlpha >= 1) suppressCtaForever();
     }
   }
 
@@ -680,6 +745,10 @@ function resetAll() {
   autoRevealAlpha = 0;
   if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
   compositeFrame();
+
+  ctaSuppressed = false;
+  if (ctaCooldownTimer) { clearTimeout(ctaCooldownTimer); ctaCooldownTimer = null; }
+  setCtaVisible(!MASK_ONLY);
 }
 
 // Une tache ajoutée à chaque clic, à l'endroit cliqué
@@ -757,6 +826,7 @@ function connectHeat() {
       if (Number.isFinite(px) && Number.isFinite(py)) {
         updateHeatStatus(`clic reçu ! (${data.x}, ${data.y})`);
         addBlobAt(px, py);
+        hideCtaTemporarily(10000);
       }
     };
 
