@@ -64,11 +64,16 @@
     transition: opacity 0.6s ease;
   }
   #cta.visible {
-    animation: cta-breathe 2.6s ease-in-out infinite;
+    /* Cycle complet plus lent : fade-in -> maintien -> fade-out jusqu'à 0% ->
+       pause sur l'invisible avant de recommencer. */
+    animation: cta-breathe 7s ease-in-out infinite;
   }
   @keyframes cta-breathe {
-    0%, 100% { opacity: 0.25; }
-    50% { opacity: 1; }
+    0%   { opacity: 0; }   /* invisible (fin de la pause) */
+    20%  { opacity: 1; }   /* fade-in terminé */
+    60%  { opacity: 1; }   /* maintien visible */
+    80%  { opacity: 0; }   /* fade-out terminé, retombé à 0% */
+    100% { opacity: 0; }   /* pause avant de refade-in */
   }
 </style>
 </head>
@@ -161,10 +166,16 @@ const AUTO_REVEAL = {
 // utile pour piloter une autre source via le filtre "Dynamic Mask" de StreamFX.
 // ?heatChannel=123456789 permet de tester avec une autre chaîne (ex: un compte de
 // test) sans modifier CONFIG.heatChannelId dans le fichier.
+// ?textOnly=1 masque tout le canvas (donc le décor/masque d'encre) et n'affiche
+// que le texte "cliquez pour interagir" — pour une 2e Browser Source transparente
+// posée par-dessus le reste de la scène quand ?maskonly=1 est utilisé ailleurs
+// (le texte ne peut pas cohabiter avec le mode masque sur la même source : tout
+// pixel opaque y devient un "trou" dans le masque plutôt que du texte lisible).
 const urlParams = new URLSearchParams(location.search);
 if (urlParams.get('decor')) CONFIG.decorImageSrc = urlParams.get('decor');
 if (urlParams.get('heatChannel')) CONFIG.heatChannelId = urlParams.get('heatChannel');
 const MASK_ONLY = urlParams.get('maskonly') === '1';
+const TEXT_ONLY = urlParams.get('textOnly') === '1';
 // HUD de debug (bas gauche) : caché par défaut, affichable avec ?debug=1 dans l'URL
 // ou en appuyant sur la touche D une fois la page ouverte dans un navigateur normal.
 const hudEl = document.getElementById('hud');
@@ -205,6 +216,7 @@ function hideCtaTemporarily(durationMs) {
 
 const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
+if (TEXT_ONLY) canvas.style.display = 'none';
 
 let W, H, DPR;
 function resize() {
