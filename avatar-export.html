@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Export avatars (PNG)</title>
+<style>
+  :root{
+    --bg: #000000;
+    --fg: #c9c9c9;
+    --panel: #111111;
+    --border: rgba(255,255,255,0.25);
+    --muted: #999999;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:'Segoe UI', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:900px;
+    margin:0 auto;
+    padding:32px 20px 64px;
+  }
+  h1{ font-size:22px; margin:0 0 4px; }
+  p.sub{ color:var(--muted); margin:0 0 24px; font-size:14px; }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  label{ font-size:13px; color:var(--muted); display:block; margin-bottom:6px; }
+  input[type=text], input[type=number]{
+    font-family:inherit;
+    font-size:14px;
+    background:#000;
+    color:var(--fg);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 10px;
+    width:100%;
+  }
+  button{
+    font-family:inherit;
+    font-size:14px;
+    font-weight:600;
+    color:#000;
+    background:var(--fg);
+    border:none;
+    border-radius:8px;
+    padding:10px 18px;
+    cursor:pointer;
+  }
+  button:hover{ filter:brightness(0.85); }
+  button:disabled{ opacity:0.5; cursor:not-allowed; }
+  button.ghost{
+    background:transparent;
+    color:var(--fg);
+    border:1px solid var(--border);
+  }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px; }
+  .row > div{ flex:1; min-width:160px; }
+  #status{ margin-top:12px; font-size:13px; min-height:18px; white-space:pre-line; }
+  #status.ok{ color:#8fd18f; }
+  #status.err{ color:#e08080; }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(120px, 1fr));
+    gap:14px;
+    margin-top:20px;
+  }
+  .avatar-cell{
+    background:#000;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:8px;
+    text-align:center;
+  }
+  .avatar-cell canvas{
+    width:100%;
+    aspect-ratio:1/1;
+    background:var(--fg);
+    border-radius:8px;
+    image-rendering:pixelated;
+  }
+  .avatar-cell .login{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:6px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .avatar-cell a{
+    display:inline-block;
+    margin-top:4px;
+    font-size:11px;
+    color:var(--fg);
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Export des avatars viewers (PNG)</h1>
+  <p class="sub">Recompose chaque avatar enregistre dans Supabase (table <code>avatar_customizations</code>) a partir de ses couches, et exporte en PNG. Lecture seule, ne modifie rien.</p>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="scale-input">Taille export (px, cote)</label>
+        <input type="number" id="scale-input" value="600" min="60" max="4096" step="60">
+      </div>
+      <div>
+        <label for="login-filter">Filtrer par pseudo (optionnel, un par ligne)</label>
+        <input type="text" id="login-filter" placeholder="ex: pseudo1, pseudo2">
+      </div>
+    </div>
+    <button id="load-btn">Charger les avatars</button>
+    <button class="ghost" id="zip-btn" disabled>Telecharger tout en ZIP</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script src="assets/parts-manifest.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+(function(){
+
+  const CONFIG = {
+    SUPABASE_URL: 'https://nvqddjwfzuusvmfwilyh.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_z9m2o_qjOP5Evrn_sR8uOw_vgeSIywz',
+  };
+
+  const manifest = window.AVATAR_PARTS_MANIFEST;
+  const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+  const loadBtn = document.getElementById('load-btn');
+  const zipBtn = document.getElementById('zip-btn');
+  const statusEl = document.getElementById('status');
+  const gridEl = document.getElementById('grid');
+  const scaleInput = document.getElementById('scale-input');
+  const loginFilterInput = document.getElementById('login-filter');
+
+  function setStatus(text, cls){
+    statusEl.textContent = text;
+    statusEl.className = cls || '';
+  }
+
+  // Ouvrir ce fichier en double-clic (file://) fait que Chrome/Firefox
+  // considere chaque fichier local comme une origine "opaque" distincte :
+  // les images se dessinent bien a l'ecran mais lire les pixels du canvas
+  // (toBlob, pour generer le PNG) est bloque pour raisons de securite -> le
+  // telechargement echoue silencieusement. Ca ne se produit pas une fois la
+  // page servie en http(s) (localhost ou GitHub Pages), donc on previent
+  // l'utilisateur des le chargement plutot que de le laisser deviner.
+  if(location.protocol === 'file:'){
+    setStatus(
+      "Cette page est ouverte en double-clic (file://) : le telechargement des PNG va echouer a cause des restrictions de securite du navigateur.\n" +
+      "Sers-la via un serveur local, par exemple :\n" +
+      "  python -m http.server 8000\n" +
+      "puis ouvre http://localhost:8000/avatar-export.html\n" +
+      "(ou utilise directement la page une fois publiee sur GitHub Pages).",
+      'err'
+    );
+  }
+
+  function loadImage(src){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Impossible de charger ' + src));
+      img.src = src;
+    });
+  }
+
+  // Compose les couches d'un avatar (dans renderOrder) sur un canvas carre.
+  // Retourne aussi la liste des couches qui n'ont pas pu etre chargees, pour
+  // qu'on puisse avertir l'utilisateur plutot que de livrer un PNG vide en
+  // silence.
+  async function renderAvatarCanvas(row, size){
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+
+    const failed = [];
+    for(const cat of manifest.renderOrder){
+      const idx = row[cat];
+      if(!idx) continue;
+      const src = manifest.partPath(cat, idx);
+      try{
+        const img = await loadImage(src);
+        ctx.drawImage(img, 0, 0, size, size);
+      }catch(err){
+        console.error('[avatar-export]', row.twitch_login, err);
+        failed.push(cat);
+      }
+    }
+    return { canvas, failed };
+  }
+
+  function canvasToBlob(canvas){
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  }
+
+  function sanitizeFilename(name){
+    return String(name).replace(/[^a-z0-9_-]+/gi, '_');
+  }
+
+  let renderedAvatars = []; // { login, canvas }
+
+  async function loadAndRender(){
+    loadBtn.disabled = true;
+    zipBtn.disabled = true;
+    gridEl.innerHTML = '';
+    renderedAvatars = [];
+    setStatus('Chargement depuis Supabase...');
+
+    const { data, error } = await sb
+      .from('avatar_customizations')
+      .select('*')
+      .order('twitch_login', { ascending: true });
+
+    if(error){
+      setStatus('Erreur Supabase: ' + error.message, 'err');
+      loadBtn.disabled = false;
+      return;
+    }
+
+    let rows = data || [];
+
+    const filterRaw = loginFilterInput.value.trim();
+    if(filterRaw){
+      const wanted = new Set(
+        filterRaw.split(/[\n,]/).map(s => s.trim().toLowerCase()).filter(Boolean)
+      );
+      rows = rows.filter(r => wanted.has(String(r.twitch_login).toLowerCase()));
+    }
+
+    if(rows.length === 0){
+      setStatus('Aucun avatar trouve.', 'err');
+      loadBtn.disabled = false;
+      return;
+    }
+
+    const size = Math.max(60, Math.min(4096, parseInt(scaleInput.value, 10) || 600));
+    setStatus(`Rendu de ${rows.length} avatar(s)...`);
+
+    const rowsWithErrors = [];
+
+    for(let i = 0; i < rows.length; i++){
+      const row = rows[i];
+      const { canvas, failed } = await renderAvatarCanvas(row, size);
+      renderedAvatars.push({ login: row.twitch_login, canvas });
+      if(failed.length) rowsWithErrors.push({ login: row.twitch_login, failed });
+
+      const cell = document.createElement('div');
+      cell.className = 'avatar-cell';
+      const displayCanvas = canvas.cloneNode();
+      displayCanvas.getContext('2d').drawImage(canvas, 0, 0);
+      cell.appendChild(displayCanvas);
+
+      const loginEl = document.createElement('div');
+      loginEl.className = 'login';
+      loginEl.textContent = row.twitch_login;
+      if(failed.length) loginEl.textContent += ' (incomplet)';
+      cell.appendChild(loginEl);
+
+      const dlLink = document.createElement('a');
+      dlLink.textContent = 'Telecharger PNG';
+      dlLink.href = '#';
+      dlLink.onclick = async (e) => {
+        e.preventDefault();
+        try{
+          const blob = await canvasToBlob(canvas);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = sanitizeFilename(row.twitch_login) + '.png';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }catch(err){
+          console.error('[avatar-export] telechargement:', err);
+          setStatus(
+            'Telechargement impossible : ' + err.message + '\n' +
+            (location.protocol === 'file:'
+              ? "Cette page est ouverte en file://, sers-la via un serveur local (voir message ci-dessus au chargement)."
+              : 'Regarde la console pour le detail.'),
+            'err'
+          );
+        }
+      };
+      cell.appendChild(dlLink);
+
+      gridEl.appendChild(cell);
+      setStatus(`Rendu de ${i + 1} / ${rows.length} avatar(s)...`);
+    }
+
+    let msg = `${rows.length} avatar(s) prets. Clique sur un avatar pour le telecharger, ou "Telecharger tout en ZIP".`;
+    let cls = 'ok';
+    if(rowsWithErrors.length){
+      cls = 'err';
+      msg += `\nAttention: ${rowsWithErrors.length} avatar(s) incomplet(s) (couche(s) introuvable(s)):\n`;
+      msg += rowsWithErrors.map(r => `- ${r.login}: ${r.failed.join(', ')}`).join('\n');
+    }
+    setStatus(msg, cls);
+    loadBtn.disabled = false;
+    zipBtn.disabled = false;
+  }
+
+  async function downloadZip(){
+    if(renderedAvatars.length === 0) return;
+    zipBtn.disabled = true;
+    setStatus('Compression en ZIP...');
+
+    try{
+      const zip = new JSZip();
+      for(const item of renderedAvatars){
+        const blob = await canvasToBlob(item.canvas);
+        zip.file(sanitizeFilename(item.login) + '.png', blob);
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'avatars-export.zip';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }catch(err){
+      console.error('[avatar-export] zip:', err);
+      setStatus(
+        'Telechargement du ZIP impossible : ' + err.message + '\n' +
+        (location.protocol === 'file:'
+          ? "Cette page est ouverte en file://, sers-la via un serveur local (voir message ci-dessus au chargement)."
+          : 'Regarde la console pour le detail.'),
+        'err'
+      );
+      zipBtn.disabled = false;
+      return;
+    }
+
+    setStatus(`${renderedAvatars.length} avatar(s) exportes en ZIP.`, 'ok');
+    zipBtn.disabled = false;
+  }
+
+  loadBtn.addEventListener('click', loadAndRender);
+  zipBtn.addEventListener('click', downloadZip);
+
+})();
+</script>
+
+</body>
+</html>
